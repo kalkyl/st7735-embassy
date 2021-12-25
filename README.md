@@ -1,2 +1,3 @@
-# st7735-async
-Async driver for the ST7735 LCD display driver
+# st7735-embassy
+
+Async driver for the ST7735 LCD display driver.
