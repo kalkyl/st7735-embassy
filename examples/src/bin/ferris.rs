@@ -29,15 +29,14 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
 
     let mut display = ST7735::new(spim, dc, rst, true, false, 160, 128, Orientation::Landscape);
-
-    display.init(&mut Delay).await.ok();
-    display.clear(Rgb565::BLACK).ok();
+    display.init(&mut Delay).await.unwrap();
+    display.clear(Rgb565::BLACK).unwrap();
 
     let image_raw: ImageRawLE<Rgb565> =
         ImageRaw::new(include_bytes!("../../assets/ferris.raw"), 86);
     let image: Image<_> = Image::new(&image_raw, Point::new(34, 24));
-    image.draw(&mut display).ok();
-    display.flush().await.ok();
+    image.draw(&mut display).unwrap();
+    display.flush().await.unwrap();
 
     let mut backlight = Output::new(p.P0_13, Level::Low, OutputDrive::Standard);
     loop {
