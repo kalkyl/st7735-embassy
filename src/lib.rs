@@ -154,7 +154,7 @@ where
     }
 
     async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<CommE, PinE>> {
-        let mut buf = [0_u8; BUF_SIZE];
+        let mut buf = [0_u8; 8];
         buf[..data.len()].copy_from_slice(data);
         embassy_traits::spi::Write::write(&mut self.spi, &buf[..data.len()])
             .await
