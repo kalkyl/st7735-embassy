@@ -284,10 +284,14 @@ where
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        for x in 0..self.width {
-            for y in 0..self.height {
-                self.set_pixel(x as u16, y as u16, RawU16::from(color).into_inner())
-            }
+        let c = RawU16::from(color).into_inner();
+        for i in 0..BUF_SIZE {
+            assert!(i < self.buffer.len());
+            self.buffer[i] = if i % 2 == 0 {
+                ((c & 0xff00) >> 8) as u8
+            } else {
+                (c & 0xff) as u8
+            };
         }
         Ok(())
     }
