@@ -7,18 +7,15 @@ use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
 use defmt::*;
 use embassy::executor::Spawner;
-use embassy::time::Delay;
-use embassy::time::{Duration, Timer};
+use embassy::time::{Delay, Duration, Timer};
 use embassy_nrf::gpio::{Level, NoPin, Output, OutputDrive};
-use embassy_nrf::Peripherals;
-use embassy_nrf::{interrupt, spim};
-use st7735_embassy::{self, Orientation, ST7735};
-
+use embassy_nrf::{interrupt, spim, Peripherals};
 use embedded_graphics::{
     image::{Image, ImageRaw, ImageRawLE},
     pixelcolor::Rgb565,
     prelude::*,
 };
+use st7735_embassy::{self, Orientation, ST7735};
 
 #[embassy::main]
 async fn main(_spawner: Spawner, p: Peripherals) {
@@ -45,7 +42,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let mut backlight = Output::new(p.P0_13, Level::Low, OutputDrive::Standard);
     loop {
         backlight.set_high();
-        Timer::after(Duration::from_millis(300)).await;
+        Timer::after(Duration::from_millis(700)).await;
         backlight.set_low();
         Timer::after(Duration::from_millis(300)).await;
     }
