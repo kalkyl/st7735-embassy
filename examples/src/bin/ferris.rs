@@ -21,8 +21,8 @@ use st7735_embassy::{self, Orientation, ST7735};
 async fn main(_spawner: Spawner, p: Peripherals) {
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M16;
-    let irq = interrupt::take!(SPIM3);
-    let spim = spim::Spim::new(p.SPI3, irq, p.P0_15, NoPin, p.P0_18, config);
+    let irq = interrupt::take!(SPIM2_SPIS2_SPI2);
+    let spim = spim::Spim::new(p.SPI2, irq, p.P0_15, NoPin, p.P0_18, config);
 
     let _cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
     let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
