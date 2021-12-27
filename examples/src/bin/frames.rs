@@ -19,25 +19,25 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use st7735_embassy::{self, Frame, ST7735IF};
 
 const BUF_SIZE: usize = 160 * 128 * 2;
-static FRAME: Forever<Frame<BUF_SIZE>> = Forever::new();
-static FRAME2: Forever<Frame<BUF_SIZE>> = Forever::new();
-static SIG: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
-static SIG2: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
+static FRAME_A: Forever<Frame<BUF_SIZE>> = Forever::new();
+static FRAME_B: Forever<Frame<BUF_SIZE>> = Forever::new();
+static NEXT_FRAME: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
+static READY_FRAME: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
 
 #[embassy::task]
 async fn render(
     spim: Spim<'static, SPI3>,
     dc: Output<'static, P0_20>,
     rst: Output<'static, P0_22>,
-    sig: &'static Signal<&'static mut Frame<BUF_SIZE>>,
-    sig2: &'static Signal<&'static mut Frame<BUF_SIZE>>,
+    next_frame: &'static Signal<&'static mut Frame<BUF_SIZE>>,
+    ready_frame: &'static Signal<&'static mut Frame<BUF_SIZE>>,
 ) {
     let mut display = ST7735IF::new(spim, dc, rst, Default::default());
     display.init(&mut Delay).await.unwrap();
-    let mut frame = sig2.wait().await;
+    let mut frame = ready_frame.wait().await;
     loop {
-        sig.signal(frame);
-        frame = sig2.wait().await;
+        next_frame.signal(frame);
+        frame = ready_frame.wait().await;
         display.flush_frame(&frame).await.unwrap();
     }
 }
@@ -53,25 +53,25 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
     let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
 
-    let sig = SIG.put(Signal::new());
-    let frame_a = FRAME.put(Default::default());
-    sig.signal(frame_a);
+    let next_frame = NEXT_FRAME.put(Signal::new());
+    let frame_a = FRAME_A.put(Default::default());
+    next_frame.signal(frame_a);
 
-    let sig2 = SIG2.put(Signal::new());
-    let frame_b = FRAME2.put(Default::default());
-    sig2.signal(frame_b);
+    let ready_frame = READY_FRAME.put(Signal::new());
+    let frame_b = FRAME_B.put(Default::default());
+    ready_frame.signal(frame_b);
 
-    defmt::unwrap!(spawner.spawn(render(spim, dc, rst, sig, sig2)));
+    defmt::unwrap!(spawner.spawn(render(spim, dc, rst, next_frame, ready_frame)));
 
     let _backlight = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
 
     let mut x = 0;
     let mut y = 0;
     loop {
-        let frame = sig.wait().await;
+        let frame = next_frame.wait().await;
         frame.clear(Rgb565::BLACK).unwrap();
         frame.set_pixel(x, y, Rgb565::GREEN);
-        sig2.signal(frame);
+        ready_frame.signal(frame);
         x = (x + 1) % 160;
         y = (y + 1) % 128;
         Timer::after(Duration::from_millis(10)).await;
