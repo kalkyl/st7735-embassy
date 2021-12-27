@@ -219,6 +219,16 @@ where
         self.write_buffer().await
     }
 
+    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<CommE, PinE>> {
+        self.set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
+            .await?;
+        self.write_command(Instruction::RAMWR, &[]).await?;
+        self.start_data()?;
+        embassy_traits::spi::Write::write(&mut self.spi, buf)
+            .await
+            .map_err(Error::Comm)
+    }
+
     /// Sets a pixel color at the given coords.
     pub fn set_pixel(&mut self, x: u16, y: u16, color: u16) {
         let idx = match self.orientation {
@@ -314,4 +324,95 @@ pub enum Error<CommE = (), PinE = ()> {
     Comm(CommE),
     /// Pin setting error
     Pin(PinE),
+}
+
+pub struct Frame<const N: usize> {
+    pub width: u32,
+    pub height: u32,
+    pub orientation: Orientation,
+    pub buffer: [u8; N],
+}
+
+impl<const N: usize> Frame<N> {
+    pub fn new(width: u32, height: u32, orientation: Orientation, buffer: [u8; N]) -> Self {
+        Self {
+            width,
+            height,
+            orientation,
+            buffer,
+        }
+    }
+    pub fn set_pixel(&mut self, x: u16, y: u16, color: Rgb565) {
+        let color = RawU16::from(color).into_inner();
+        let idx = match self.orientation {
+            Orientation::Landscape | Orientation::LandscapeSwapped => {
+                if x as u32 >= self.width {
+                    return;
+                }
+                ((y as usize) * self.width as usize) + (x as usize)
+            }
+
+            Orientation::Portrait | Orientation::PortraitSwapped => {
+                if y as u32 >= self.width as u32 {
+                    return;
+                }
+                ((y as usize) * self.height as usize) + (x as usize)
+            }
+        } * 2;
+
+        // Split 16 bit value into two bytes
+        let low = (color & 0xff) as u8;
+        let high = ((color & 0xff00) >> 8) as u8;
+        if idx >= self.buffer.len() - 1 {
+            return;
+        }
+        self.buffer[idx] = high;
+        self.buffer[idx + 1] = low;
+    }
+}
+impl<const N: usize> Default for Frame<N> {
+    fn default() -> Self {
+        Self {
+            width: 160,
+            height: 128,
+            orientation: Orientation::Landscape,
+            buffer: [0; N],
+        }
+    }
+}
+
+impl<const N: usize> DrawTarget for Frame<N> {
+    type Error = ();
+    type Color = Rgb565;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        let bb = self.bounding_box();
+        pixels
+            .into_iter()
+            .filter(|Pixel(pos, _color)| bb.contains(*pos))
+            .for_each(|Pixel(pos, color)| self.set_pixel(pos.x as u16, pos.y as u16, color));
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        let c = RawU16::from(color).into_inner();
+        for i in 0..BUF_SIZE {
+            assert!(i < self.buffer.len());
+            self.buffer[i] = if i % 2 == 0 {
+                ((c & 0xff00) >> 8) as u8
+            } else {
+                (c & 0xff) as u8
+            };
+        }
+        Ok(())
+    }
+}
+
+impl<const N: usize> OriginDimensions for Frame<N> {
+    fn size(&self) -> Size {
+        Size::new(self.width, self.height)
+    }
 }
