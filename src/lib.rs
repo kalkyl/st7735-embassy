@@ -229,6 +229,19 @@ where
             .map_err(Error::Comm)
     }
 
+    pub async fn flush_frame<const N: usize>(
+        &mut self,
+        frame: &Frame<N>,
+    ) -> Result<(), Error<CommE, PinE>> {
+        self.set_address_window(0, 0, frame.width as u16 - 1, frame.height as u16 - 1)
+            .await?;
+        self.write_command(Instruction::RAMWR, &[]).await?;
+        self.start_data()?;
+        embassy_traits::spi::Write::write(&mut self.spi, &frame.buffer)
+            .await
+            .map_err(Error::Comm)
+    }
+
     /// Sets a pixel color at the given coords.
     pub fn set_pixel(&mut self, x: u16, y: u16, color: u16) {
         let idx = match self.orientation {

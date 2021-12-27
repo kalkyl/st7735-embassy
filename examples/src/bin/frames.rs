@@ -38,7 +38,7 @@ async fn render(
     loop {
         sig.signal(frame);
         frame = sig2.wait().await;
-        display.flush_buffer(&frame.buffer).await.unwrap();
+        display.flush_frame(&frame).await.unwrap();
     }
 }
 
@@ -74,7 +74,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
         sig2.signal(frame);
         x = (x + 2) % 160;
         y = (y + 2) % 128;
-        Timer::after(Duration::from_millis(10)).await;
+        Timer::after(Duration::from_millis(15)).await;
     }
 }
 
