@@ -15,7 +15,7 @@ use embedded_graphics::{
     pixelcolor::Rgb565,
     prelude::*,
 };
-use st7735_embassy::{self, Orientation, ST7735};
+use st7735_embassy::{self, ST7735};
 
 #[embassy::main]
 async fn main(_spawner: Spawner, p: Peripherals) {
@@ -28,7 +28,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
     let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
 
-    let mut display = ST7735::new(spim, dc, rst, true, false, 160, 128, Orientation::Landscape);
+    let mut display = ST7735::new(spim, dc, rst, Default::default(), 160, 128);
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 

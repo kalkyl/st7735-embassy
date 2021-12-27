@@ -9,7 +9,7 @@ use embedded_hal::digital::v2::OutputPin;
 const BUF_SIZE: usize = 128 * 160 * 2;
 
 /// Async ST7735 LCD display driver.
-pub struct ST7735<SPI, DC, RST, CommE, PinE>
+pub struct ST7735IF<SPI, DC, RST, CommE, PinE>
 where
     SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
     DC: OutputPin<Error = PinE>,
@@ -28,10 +28,17 @@ where
     /// Global image offset
     dx: u16,
     dy: u16,
+    orientation: Orientation,
+}
+pub struct ST7735<SPI, DC, RST, CommE, PinE>
+where
+    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    DC: OutputPin<Error = PinE>,
+    RST: OutputPin<Error = PinE>,
+{
+    iface: ST7735IF<SPI, DC, RST, CommE, PinE>,
     width: u32,
     height: u32,
-    /// Screen orientation
-    orientation: Orientation,
     buffer: [u8; BUF_SIZE],
 }
 
@@ -44,35 +51,39 @@ pub enum Orientation {
     LandscapeSwapped = 0xA0,
 }
 
-impl<SPI, DC, RST, CommE, PinE> ST7735<SPI, DC, RST, CommE, PinE>
+pub struct Config {
+    rgb: bool,
+    inverted: bool,
+    orientation: Orientation,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            rgb: true,
+            inverted: false,
+            orientation: Orientation::Landscape,
+        }
+    }
+}
+
+impl<SPI, DC, RST, CommE, PinE> ST7735IF<SPI, DC, RST, CommE, PinE>
 where
     SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
     /// Creates a new driver instance that uses hardware SPI.
-    pub fn new(
-        spi: SPI,
-        dc: DC,
-        rst: RST,
-        rgb: bool,
-        inverted: bool,
-        width: u32,
-        height: u32,
-        orientation: Orientation,
-    ) -> Self {
+    pub fn new(spi: SPI, dc: DC, rst: RST, config: Config) -> Self {
         Self {
             spi,
             dc,
             rst,
-            rgb,
-            inverted,
+            rgb: config.rgb,
+            inverted: config.inverted,
+            orientation: config.orientation,
             dx: 0,
             dy: 0,
-            width,
-            height,
-            orientation,
-            buffer: [0; BUF_SIZE],
         }
     }
 
@@ -131,6 +142,21 @@ where
         self.rst.set_high().map_err(Error::Pin)
     }
 
+    pub async fn set_orientation(
+        &mut self,
+        orientation: Orientation,
+    ) -> Result<(), Error<CommE, PinE>> {
+        if self.rgb {
+            self.write_command(Instruction::MADCTL, &[orientation as u8])
+                .await?;
+        } else {
+            self.write_command(Instruction::MADCTL, &[orientation as u8 | 0x08])
+                .await?;
+        }
+        self.orientation = orientation;
+        Ok(())
+    }
+
     async fn write_command(
         &mut self,
         command: Instruction,
@@ -161,30 +187,9 @@ where
             .map_err(Error::Comm)
     }
 
-    async fn write_buffer(&mut self) -> Result<(), Error<CommE, PinE>> {
-        embassy_traits::spi::Write::write(&mut self.spi, &self.buffer)
-            .await
-            .map_err(Error::Comm)
-    }
-
     /// Writes a data word to the display.
     async fn write_word(&mut self, value: u16) -> Result<(), Error<CommE, PinE>> {
         self.write_data(&value.to_be_bytes()).await
-    }
-
-    pub async fn set_orientation(
-        &mut self,
-        orientation: Orientation,
-    ) -> Result<(), Error<CommE, PinE>> {
-        if self.rgb {
-            self.write_command(Instruction::MADCTL, &[orientation as u8])
-                .await?;
-        } else {
-            self.write_command(Instruction::MADCTL, &[orientation as u8 | 0x08])
-                .await?;
-        }
-        self.orientation = orientation;
-        Ok(())
     }
 
     /// Sets the global offset of the displayed image
@@ -211,24 +216,6 @@ where
         self.write_word(ey + self.dy).await
     }
 
-    pub async fn flush(&mut self) -> Result<(), Error<CommE, PinE>> {
-        self.set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
-            .await?;
-        self.write_command(Instruction::RAMWR, &[]).await?;
-        self.start_data()?;
-        self.write_buffer().await
-    }
-
-    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<CommE, PinE>> {
-        self.set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
-            .await?;
-        self.write_command(Instruction::RAMWR, &[]).await?;
-        self.start_data()?;
-        embassy_traits::spi::Write::write(&mut self.spi, buf)
-            .await
-            .map_err(Error::Comm)
-    }
-
     pub async fn flush_frame<const N: usize>(
         &mut self,
         frame: &Frame<N>,
@@ -241,10 +228,59 @@ where
             .await
             .map_err(Error::Comm)
     }
+}
+
+impl<SPI, DC, RST, CommE, PinE> ST7735<SPI, DC, RST, CommE, PinE>
+where
+    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    DC: OutputPin<Error = PinE>,
+    RST: OutputPin<Error = PinE>,
+{
+    /// Creates a new driver instance that uses hardware SPI.
+    pub fn new(spi: SPI, dc: DC, rst: RST, config: Config, width: u32, height: u32) -> Self {
+        Self {
+            iface: ST7735IF::new(spi, dc, rst, config),
+            width,
+            height,
+            buffer: [0; BUF_SIZE],
+        }
+    }
+
+    /// Runs commands to initialize the display.
+    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<CommE, PinE>>
+    where
+        D: Delay,
+    {
+        self.iface.init(delay).await?;
+
+        Ok(())
+    }
+
+    pub async fn flush(&mut self) -> Result<(), Error<CommE, PinE>> {
+        self.iface
+            .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
+            .await?;
+        self.iface.write_command(Instruction::RAMWR, &[]).await?;
+        self.iface.start_data()?;
+        embassy_traits::spi::Write::write(&mut self.iface.spi, &self.buffer)
+            .await
+            .map_err(Error::Comm)
+    }
+
+    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<CommE, PinE>> {
+        self.iface
+            .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
+            .await?;
+        self.iface.write_command(Instruction::RAMWR, &[]).await?;
+        self.iface.start_data()?;
+        embassy_traits::spi::Write::write(&mut self.iface.spi, buf)
+            .await
+            .map_err(Error::Comm)
+    }
 
     /// Sets a pixel color at the given coords.
     pub fn set_pixel(&mut self, x: u16, y: u16, color: u16) {
-        let idx = match self.orientation {
+        let idx = match self.iface.orientation {
             Orientation::Landscape | Orientation::LandscapeSwapped => {
                 if x as u32 >= self.width {
                     return;

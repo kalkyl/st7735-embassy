@@ -16,7 +16,7 @@ use embassy_nrf::{
     Peripherals,
 };
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use st7735_embassy::{self, Frame, Orientation, ST7735};
+use st7735_embassy::{self, Frame, ST7735IF};
 
 const BUF_SIZE: usize = 160 * 128 * 2;
 static FRAME: Forever<Frame<BUF_SIZE>> = Forever::new();
@@ -32,7 +32,7 @@ async fn render(
     sig: &'static Signal<&'static mut Frame<BUF_SIZE>>,
     sig2: &'static Signal<&'static mut Frame<BUF_SIZE>>,
 ) {
-    let mut display = ST7735::new(spim, dc, rst, true, false, 160, 128, Orientation::Landscape);
+    let mut display = ST7735IF::new(spim, dc, rst, Default::default());
     display.init(&mut Delay).await.unwrap();
     let mut frame = sig2.wait().await;
     loop {
@@ -72,9 +72,9 @@ async fn main(spawner: Spawner, p: Peripherals) {
         frame.clear(Rgb565::BLACK).unwrap();
         frame.set_pixel(x, y, Rgb565::GREEN);
         sig2.signal(frame);
-        x = (x + 2) % 160;
-        y = (y + 2) % 128;
-        Timer::after(Duration::from_millis(15)).await;
+        x = (x + 1) % 160;
+        y = (y + 1) % 128;
+        Timer::after(Duration::from_millis(10)).await;
     }
 }
 
