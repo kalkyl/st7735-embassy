@@ -279,11 +279,11 @@ where
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
-        let buf = self.buffer;
+        let buf = &self.buffer;
         self.iface
             .spi
             .transaction(move |bus| async move {
-                let res = bus.write(&buf).await;
+                let res = bus.write(buf).await;
                 (bus, res)
             })
             .await
