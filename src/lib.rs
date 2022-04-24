@@ -2,16 +2,18 @@
 
 pub mod instruction;
 use crate::instruction::Instruction;
-use embassy_traits::delay::Delay;
 use embedded_hal::digital::v2::OutputPin;
+use embedded_hal_async::delay::DelayUs;
+use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice};
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
 
 /// Async ST7735 LCD display driver.
-pub struct ST7735IF<SPI, DC, RST, CommE, PinE>
+pub struct ST7735IF<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
@@ -30,13 +32,14 @@ where
     dy: u16,
     orientation: Orientation,
 }
-pub struct ST7735<SPI, DC, RST, CommE, PinE>
+pub struct ST7735<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
-    iface: ST7735IF<SPI, DC, RST, CommE, PinE>,
+    iface: ST7735IF<SPI, DC, RST, PinE>,
     width: u32,
     height: u32,
     buffer: [u8; BUF_SIZE],
@@ -67,9 +70,10 @@ impl Default for Config {
     }
 }
 
-impl<SPI, DC, RST, CommE, PinE> ST7735IF<SPI, DC, RST, CommE, PinE>
+impl<SPI, DC, RST, E, PinE> ST7735IF<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
@@ -88,15 +92,15 @@ where
     }
 
     /// Runs commands to initialize the display.
-    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<CommE, PinE>>
+    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
     where
-        D: Delay,
+        D: DelayUs,
     {
         self.hard_reset(delay).await?;
         self.write_command(Instruction::SWRESET, &[]).await?;
-        delay.delay_ms(200).await;
+        delay.delay_ms(200).await.ok();
         self.write_command(Instruction::SLPOUT, &[]).await?;
-        delay.delay_ms(200).await;
+        delay.delay_ms(200).await.ok();
         self.write_command(Instruction::FRMCTR1, &[0x01, 0x2C, 0x2D])
             .await?;
         self.write_command(Instruction::FRMCTR2, &[0x01, 0x2C, 0x2D])
@@ -126,26 +130,26 @@ where
         }
         self.write_command(Instruction::COLMOD, &[0x05]).await?;
         self.write_command(Instruction::DISPON, &[]).await?;
-        delay.delay_ms(200).await;
+        delay.delay_ms(200).await.ok();
         self.set_orientation(self.orientation).await?;
         Ok(())
     }
 
-    pub async fn hard_reset<D>(&mut self, delay: &mut D) -> Result<(), Error<CommE, PinE>>
+    pub async fn hard_reset<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
     where
-        D: Delay,
+        D: DelayUs,
     {
         self.rst.set_high().map_err(Error::Pin)?;
-        delay.delay_ms(10).await;
+        delay.delay_ms(10).await.ok();
         self.rst.set_low().map_err(Error::Pin)?;
-        delay.delay_ms(10).await;
+        delay.delay_ms(10).await.ok();
         self.rst.set_high().map_err(Error::Pin)
     }
 
     pub async fn set_orientation(
         &mut self,
         orientation: Orientation,
-    ) -> Result<(), Error<CommE, PinE>> {
+    ) -> Result<(), Error<E, PinE>> {
         if self.rgb {
             self.write_command(Instruction::MADCTL, &[orientation as u8])
                 .await?;
@@ -161,11 +165,15 @@ where
         &mut self,
         command: Instruction,
         params: &[u8],
-    ) -> Result<(), Error<CommE, PinE>> {
+    ) -> Result<(), Error<E, PinE>> {
         self.dc.set_low().map_err(Error::Pin)?;
         let mut data = [0_u8; 1];
         data.copy_from_slice(&[command as u8]);
-        embassy_traits::spi::Write::write(&mut self.spi, &data)
+        self.spi
+            .transaction(move |bus| async move {
+                let res = bus.write(&data).await;
+                (bus, res)
+            })
             .await
             .map_err(Error::Comm)?;
         if !params.is_empty() {
@@ -175,20 +183,24 @@ where
         Ok(())
     }
 
-    fn start_data(&mut self) -> Result<(), Error<CommE, PinE>> {
+    fn start_data(&mut self) -> Result<(), Error<E, PinE>> {
         self.dc.set_high().map_err(Error::Pin)
     }
 
-    async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<CommE, PinE>> {
+    async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<E, PinE>> {
         let mut buf = [0_u8; 8];
         buf[..data.len()].copy_from_slice(data);
-        embassy_traits::spi::Write::write(&mut self.spi, &buf[..data.len()])
+        self.spi
+            .transaction(move |bus| async move {
+                let res = bus.write(&buf[..data.len()]).await;
+                (bus, res)
+            })
             .await
             .map_err(Error::Comm)
     }
 
     /// Writes a data word to the display.
-    async fn write_word(&mut self, value: u16) -> Result<(), Error<CommE, PinE>> {
+    async fn write_word(&mut self, value: u16) -> Result<(), Error<E, PinE>> {
         self.write_data(&value.to_be_bytes()).await
     }
 
@@ -205,7 +217,7 @@ where
         sy: u16,
         ex: u16,
         ey: u16,
-    ) -> Result<(), Error<CommE, PinE>> {
+    ) -> Result<(), Error<E, PinE>> {
         self.write_command(Instruction::CASET, &[]).await?;
         self.start_data()?;
         self.write_word(sx + self.dx).await?;
@@ -219,20 +231,25 @@ where
     pub async fn flush_frame<const N: usize>(
         &mut self,
         frame: &Frame<N>,
-    ) -> Result<(), Error<CommE, PinE>> {
+    ) -> Result<(), Error<E, PinE>> {
         self.set_address_window(0, 0, frame.width as u16 - 1, frame.height as u16 - 1)
             .await?;
         self.write_command(Instruction::RAMWR, &[]).await?;
         self.start_data()?;
-        embassy_traits::spi::Write::write(&mut self.spi, &frame.buffer)
+        self.spi
+            .transaction(move |bus| async move {
+                let res = bus.write(&frame.buffer).await;
+                (bus, res)
+            })
             .await
             .map_err(Error::Comm)
     }
 }
 
-impl<SPI, DC, RST, CommE, PinE> ST7735<SPI, DC, RST, CommE, PinE>
+impl<SPI, DC, RST, E, PinE> ST7735<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
@@ -247,33 +264,44 @@ where
     }
 
     /// Runs commands to initialize the display.
-    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<CommE, PinE>>
+    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
     where
-        D: Delay,
+        D: DelayUs,
     {
         self.iface.init(delay).await?;
 
         Ok(())
     }
 
-    pub async fn flush(&mut self) -> Result<(), Error<CommE, PinE>> {
+    pub async fn flush(&mut self) -> Result<(), Error<E, PinE>> {
         self.iface
             .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
-        embassy_traits::spi::Write::write(&mut self.iface.spi, &self.buffer)
+        let buf = self.buffer;
+        self.iface
+            .spi
+            .transaction(move |bus| async move {
+                let res = bus.write(&buf).await;
+                (bus, res)
+            })
             .await
             .map_err(Error::Comm)
     }
 
-    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<CommE, PinE>> {
+    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<E, PinE>> {
         self.iface
             .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
-        embassy_traits::spi::Write::write(&mut self.iface.spi, buf)
+        self.iface
+            .spi
+            .transaction(move |bus| async move {
+                let res = bus.write(buf).await;
+                (bus, res)
+            })
             .await
             .map_err(Error::Comm)
     }
@@ -317,9 +345,10 @@ use self::embedded_graphics_core::{
     prelude::*,
 };
 
-impl<SPI, DC, RST, CommE, PinE> DrawTarget for ST7735<SPI, DC, RST, CommE, PinE>
+impl<SPI, DC, RST, E, PinE> DrawTarget for ST7735<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
@@ -356,9 +385,10 @@ where
     }
 }
 
-impl<SPI, DC, RST, CommE, PinE> OriginDimensions for ST7735<SPI, DC, RST, CommE, PinE>
+impl<SPI, DC, RST, E, PinE> OriginDimensions for ST7735<SPI, DC, RST, PinE>
 where
-    SPI: embassy_traits::spi::Write<u8> + embassy_traits::spi::Spi<u8, Error = CommE>,
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
     DC: OutputPin<Error = PinE>,
     RST: OutputPin<Error = PinE>,
 {
@@ -368,9 +398,9 @@ where
 }
 
 #[derive(Debug)]
-pub enum Error<CommE = (), PinE = ()> {
+pub enum Error<E = (), PinE = ()> {
     /// Communication error
-    Comm(CommE),
+    Comm(E),
     /// Pin setting error
     Pin(PinE),
 }

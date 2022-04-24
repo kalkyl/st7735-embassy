@@ -9,14 +9,15 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7.1"
 defmt = "0.3"
 defmt-rtt = "0.3"
-embassy = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.0", features = ["defmt"] }
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.0", features = ["defmt", "time-driver-rtc1", "gpiote"] }
 embedded-hal = "0.2.6"
+embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }
+embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-traits", "nightly"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 heapless = "0.7.8"
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 st7735-embassy = { path = "../"}
 embedded-graphics = "0.7.1"
+embedded-hal-async = { version = "0.1.0-alpha.0" }
 
 [features]
 # set logging levels here
