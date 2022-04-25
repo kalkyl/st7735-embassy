@@ -43,7 +43,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     image.draw(&mut display).unwrap();
     display.flush().await.unwrap();
 
-    // LED is set to max, but can be modulated with pwm
+    // LED is set to max, but can be modulated with pwm to change backlight brightness
     let mut backlight = Output::new(p.P0_03, Level::High, OutputDrive::Standard);
     loop {
         backlight.set_high();
