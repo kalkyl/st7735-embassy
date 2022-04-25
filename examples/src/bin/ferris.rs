@@ -22,7 +22,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
     let irq = interrupt::take!(SPIM3);
-    // spim args: spi on the board, irq, sck, mosi /SDA, config
+    // spim args: spi instance, irq, sck, mosi/SDA, config
     let spim = spim::Spim::new_txonly(p.SPI3, irq, p.P0_04, p.P0_28, config);
     // cs_pin: chip select pin
     let cs_pin = Output::new(p.P0_30, Level::Low, OutputDrive::Standard);
