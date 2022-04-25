@@ -4,7 +4,7 @@ pub mod instruction;
 use crate::instruction::Instruction;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal_async::delay::DelayUs;
-use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice};
+use embedded_hal_async::spi::{SpiBus, SpiDevice, SpiDeviceExt};
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
@@ -169,13 +169,7 @@ where
         self.dc.set_low().map_err(Error::Pin)?;
         let mut data = [0_u8; 1];
         data.copy_from_slice(&[command as u8]);
-        self.spi
-            .transaction(move |bus| async move {
-                let res = bus.write(&data).await;
-                (bus, res)
-            })
-            .await
-            .map_err(Error::Comm)?;
+        self.spi.write(&data).await.map_err(Error::Comm)?;
         if !params.is_empty() {
             self.start_data()?;
             self.write_data(params).await?;
@@ -191,10 +185,7 @@ where
         let mut buf = [0_u8; 8];
         buf[..data.len()].copy_from_slice(data);
         self.spi
-            .transaction(move |bus| async move {
-                let res = bus.write(&buf[..data.len()]).await;
-                (bus, res)
-            })
+            .write(&buf[..data.len()])
             .await
             .map_err(Error::Comm)
     }
@@ -236,13 +227,7 @@ where
             .await?;
         self.write_command(Instruction::RAMWR, &[]).await?;
         self.start_data()?;
-        self.spi
-            .transaction(move |bus| async move {
-                let res = bus.write(&frame.buffer).await;
-                (bus, res)
-            })
-            .await
-            .map_err(Error::Comm)
+        self.spi.write(&frame.buffer).await.map_err(Error::Comm)
     }
 }
 
@@ -280,14 +265,7 @@ where
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
         let buf = &self.buffer;
-        self.iface
-            .spi
-            .transaction(move |bus| async move {
-                let res = bus.write(buf).await;
-                (bus, res)
-            })
-            .await
-            .map_err(Error::Comm)
+        self.iface.spi.write(buf).await.map_err(Error::Comm)
     }
 
     pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<E, PinE>> {
@@ -296,14 +274,7 @@ where
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
-        self.iface
-            .spi
-            .transaction(move |bus| async move {
-                let res = bus.write(buf).await;
-                (bus, res)
-            })
-            .await
-            .map_err(Error::Comm)
+        self.iface.spi.write(buf).await.map_err(Error::Comm)
     }
 
     /// Sets a pixel color at the given coords.
