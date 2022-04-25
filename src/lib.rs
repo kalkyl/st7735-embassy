@@ -252,11 +252,6 @@ where
             .map_err(Error::Comm)
     }
 
-    /// Writes a data word to the display.
-    async fn write_word(&mut self, value: u16) -> Result<(), Error<E, PinE>> {
-        self.write_data(&value.to_be_bytes()).await
-    }
-
     /// Sets the global offset of the displayed image
     pub fn set_offset(&mut self, dx: u16, dy: u16) {
         self.dx = dx;
@@ -273,12 +268,16 @@ where
     ) -> Result<(), Error<E, PinE>> {
         self.write_command(Instruction::CASET, &[]).await?;
         self.start_data()?;
-        self.write_word(sx + self.dx).await?;
-        self.write_word(ex + self.dx).await?;
+        let sx_bytes = (sx + self.dx).to_be_bytes();
+        let ex_bytes = (ex + self.dx).to_be_bytes();
+        self.write_data(&[sx_bytes[0], sx_bytes[1], ex_bytes[0], ex_bytes[1]])
+            .await?;
         self.write_command(Instruction::RASET, &[]).await?;
         self.start_data()?;
-        self.write_word(sy + self.dy).await?;
-        self.write_word(ey + self.dy).await
+        let sy_bytes = (sy + self.dy).to_be_bytes();
+        let ey_bytes = (ey + self.dy).to_be_bytes();
+        self.write_data(&[sy_bytes[0], sy_bytes[1], ey_bytes[0], ey_bytes[1]])
+            .await
     }
 
     pub async fn flush_frame<const N: usize>(
