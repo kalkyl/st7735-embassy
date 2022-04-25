@@ -28,7 +28,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let cs_pin = Output::new(p.P0_30, Level::Low, OutputDrive::Standard);
     let spi_dev = ExclusiveDevice::new(spim, cs_pin);
 
-    // rst: do not use the RESET pin of the nrf board, this reset clears the screen
+    // rst:  display reset pin, managed at driver level
     let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
     // dc: data/command selection pin, managed at driver level
     let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
