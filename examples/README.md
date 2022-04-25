@@ -3,3 +3,5 @@
 ## Run example
 
 `$ cargo rb ferris`
+
+![](./assets/ferris_spi.jpg)
