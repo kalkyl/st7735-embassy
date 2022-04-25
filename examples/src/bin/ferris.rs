@@ -30,7 +30,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
 
     // rst: do not use the RESET pin of the nrf board, this reset clears the screen
     let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
-    // dc: data/command selection
+    // dc: data/command selection pin, managed at driver level
     let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
 
     let mut display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
