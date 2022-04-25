@@ -4,7 +4,7 @@ pub mod instruction;
 use crate::instruction::Instruction;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal_async::delay::DelayUs;
-use embedded_hal_async::spi::{SpiBus, SpiDevice, SpiDeviceExt};
+use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice, SpiDeviceExt};
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
@@ -97,40 +97,91 @@ where
         D: DelayUs,
     {
         self.hard_reset(delay).await?;
-        self.write_command(Instruction::SWRESET, &[]).await?;
-        delay.delay_ms(200).await.ok();
-        self.write_command(Instruction::SLPOUT, &[]).await?;
-        delay.delay_ms(200).await.ok();
-        self.write_command(Instruction::FRMCTR1, &[0x01, 0x2C, 0x2D])
-            .await?;
-        self.write_command(Instruction::FRMCTR2, &[0x01, 0x2C, 0x2D])
-            .await?;
-        self.write_command(Instruction::FRMCTR3, &[0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D])
-            .await?;
-        self.write_command(Instruction::INVCTR, &[0x07]).await?;
-        self.write_command(Instruction::PWCTR1, &[0xA2, 0x02, 0x84])
-            .await?;
-        self.write_command(Instruction::PWCTR2, &[0xC5]).await?;
-        self.write_command(Instruction::PWCTR3, &[0x0A, 0x00])
-            .await?;
-        self.write_command(Instruction::PWCTR4, &[0x8A, 0x2A])
-            .await?;
-        self.write_command(Instruction::PWCTR5, &[0x8A, 0xEE])
-            .await?;
-        self.write_command(Instruction::VMCTR1, &[0x0E]).await?;
-        if self.inverted {
-            self.write_command(Instruction::INVON, &[]).await?;
-        } else {
-            self.write_command(Instruction::INVOFF, &[]).await?;
+        let dc = &mut self.dc;
+        let inverted = self.inverted;
+        let rgb = self.rgb;
+
+        struct Command<'a> {
+            instruction: Instruction,
+            params: &'a [u8],
+            delay_time: u32,
         }
-        if self.rgb {
-            self.write_command(Instruction::MADCTL, &[0x00]).await?;
-        } else {
-            self.write_command(Instruction::MADCTL, &[0x08]).await?;
+
+        impl<'a> Command<'a> {
+            fn new(instruction: Instruction, params: &'a [u8], delay_time: u32) -> Self {
+                Self {
+                    instruction,
+                    params,
+                    delay_time,
+                }
+            }
         }
-        self.write_command(Instruction::COLMOD, &[0x05]).await?;
-        self.write_command(Instruction::DISPON, &[]).await?;
-        delay.delay_ms(200).await.ok();
+
+        let commands = [
+            Command::new(Instruction::SWRESET, &[], 200),
+            Command::new(Instruction::SLPOUT, &[], 200),
+            Command::new(Instruction::FRMCTR1, &[0x01, 0x2C, 0x2D], 0),
+            Command::new(Instruction::FRMCTR2, &[0x01, 0x2C, 0x2D], 0),
+            Command::new(
+                Instruction::FRMCTR3,
+                &[0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D],
+                0,
+            ),
+            Command::new(Instruction::INVCTR, &[0x07], 0),
+            Command::new(Instruction::PWCTR1, &[0xA2, 0x02, 0x84], 0),
+            Command::new(Instruction::PWCTR2, &[0xC5], 0),
+            Command::new(Instruction::PWCTR3, &[0x0A, 0x00], 0),
+            Command::new(Instruction::PWCTR4, &[0x8A, 0x2A], 0),
+            Command::new(Instruction::PWCTR5, &[0x8A, 0xEE], 0),
+            Command::new(Instruction::VMCTR1, &[0x0E], 0),
+            Command::new(
+                if inverted {
+                    Instruction::INVON
+                } else {
+                    Instruction::INVOFF
+                },
+                &[],
+                0,
+            ),
+            Command::new(Instruction::MADCTL, if rgb { &[0x00] } else { &[0x08] }, 0),
+            Command::new(Instruction::COLMOD, &[0x05], 0),
+            Command::new(Instruction::DISPON, &[], 200),
+        ];
+
+        self.spi
+            .transaction(move |bus| async move {
+                let mut res = Ok(());
+                for Command {
+                    instruction,
+                    params,
+                    delay_time,
+                } in commands
+                {
+                    dc.set_low().ok();
+                    let mut data = [0_u8; 1];
+                    data.copy_from_slice(&[instruction as u8]);
+                    res = bus.write(&data).await;
+                    if res.is_err() {
+                        break;
+                    }
+                    if !params.is_empty() {
+                        dc.set_high().ok();
+                        let mut buf = [0_u8; 8];
+                        buf[..params.len()].copy_from_slice(params);
+                        res = bus.write(&buf[..data.len()]).await;
+                        if res.is_err() {
+                            break;
+                        }
+                    }
+                    if delay_time > 0 {
+                        delay.delay_ms(delay_time).await.ok();
+                    }
+                }
+                (bus, res)
+            })
+            .await
+            .map_err(Error::Comm)?;
+
         self.set_orientation(self.orientation).await?;
         Ok(())
     }
@@ -163,17 +214,28 @@ where
 
     async fn write_command(
         &mut self,
-        command: Instruction,
+        instruction: Instruction,
         params: &[u8],
     ) -> Result<(), Error<E, PinE>> {
-        self.dc.set_low().map_err(Error::Pin)?;
-        let mut data = [0_u8; 1];
-        data.copy_from_slice(&[command as u8]);
-        self.spi.write(&data).await.map_err(Error::Comm)?;
-        if !params.is_empty() {
-            self.start_data()?;
-            self.write_data(params).await?;
-        }
+        let dc = &mut self.dc;
+        self.spi
+            .transaction(move |bus| async move {
+                dc.set_low().ok();
+                let mut data = [0_u8; 1];
+                data.copy_from_slice(&[instruction as u8]);
+                let res = bus.write(&data).await;
+                if res.is_ok() && !params.is_empty() {
+                    dc.set_high().ok();
+                    let mut buf = [0_u8; 8];
+                    buf[..params.len()].copy_from_slice(params);
+                    let res = bus.write(&buf[..data.len()]).await;
+                    (bus, res)
+                } else {
+                    (bus, res)
+                }
+            })
+            .await
+            .map_err(Error::Comm)?;
         Ok(())
     }
 
