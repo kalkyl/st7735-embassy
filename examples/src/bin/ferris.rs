@@ -31,7 +31,6 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     // rst: do not use the RESET pin of the nrf board, this reset clears the screen
     let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
     // dc: data/command selection
-    // and in the other state when receiving pixel data.
     // This is managed at the driver level.
     let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
 
