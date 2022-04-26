@@ -40,7 +40,7 @@ let mut backlight = Output::new(<led>, Level::High, OutputDrive::Standard);
 | mosi      | SPI data                                | SDA            | `P0_28`            |
 | cs        | SPI chip select                         | CS             | `P0_30`            |
 | dc        | Data/command selection                  | A0             | `P0_29`            |
-| backlight | Backglight  (try to change it 😊)       | LED            | `P0_03`            |
+| backlight | Backlight                               | LED            | `P0_03`            |
 | x         | GND                                     | GND            | `GND`              |
 | x         | Power (3V3-5V)                          | VCC            | `5V`               |
 
