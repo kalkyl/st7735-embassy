@@ -16,8 +16,8 @@ use embassy_nrf::{
     Peripherals,
 };
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use st7735_embassy::{self, Frame, ST7735IF};
 use embedded_hal_async::spi::ExclusiveDevice;
+use st7735_embassy::{self, Frame, ST7735IF};
 
 const BUF_SIZE: usize = 160 * 128 * 2;
 static FRAME_A: Forever<Frame<BUF_SIZE>> = Forever::new();
@@ -27,7 +27,7 @@ static READY_FRAME: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new
 
 #[embassy::task]
 async fn render(
-    spi_dev: ExclusiveDevice<Spim<'static, SPI3>,Output<'static, P0_24>>,
+    spi_dev: ExclusiveDevice<Spim<'static, SPI3>, Output<'static, P0_24>>,
     dc: Output<'static, P0_20>,
     rst: Output<'static, P0_22>,
     next_frame: &'static Signal<&'static mut Frame<BUF_SIZE>>,
