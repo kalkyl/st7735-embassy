@@ -20,7 +20,7 @@ let raw_image: Bmp<Rgb565> =
 ```
 ## Configuration pins for nRF52840 DK 
 
-The pin configuration is currently made for <? the Boss>. If you want to try that on nRF52840 DK, use the following configuration.
+The pin configuration is currently made for a custom PCB. If you want to try that on nRF52840 DK, use the following configuration.
 
 ### Code to change:
 ```rust=
