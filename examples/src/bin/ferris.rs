@@ -28,6 +28,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     // rst:  display reset pin, managed at driver level
     let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
     // dc: data/command selection pin, managed at driver level
+
     let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
 
     let mut display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
@@ -36,7 +37,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
 
     let raw_image: Bmp<Rgb565> =
         Bmp::from_slice(include_bytes!("../../assets/ferris.bmp")).unwrap();
-    let image = Image::new(&raw_image, Point::new(32, 32));
+    let image = Image::new(&raw_image, Point::new(34, 24));
 
     image.draw(&mut display).unwrap();
     display.flush().await.unwrap();
