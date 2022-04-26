@@ -36,7 +36,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
 
     let raw_image: Bmp<Rgb565> =
         Bmp::from_slice(include_bytes!("../../assets/ferris.bmp")).unwrap();
-    let ferris = Image::new(&raw_image, Point::new(32, 32));
+    let image = Image::new(&raw_image, Point::new(32, 32));
 
     image.draw(&mut display).unwrap();
     display.flush().await.unwrap();
