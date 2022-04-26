@@ -20,7 +20,7 @@ let raw_image: Bmp<Rgb565> =
 ```
 ## Configuration pins for nRF52840 DK 
 
-The pin configuration is currently made for <? the Boss>. If you want to try that on nRF52840 DK, use the following configuration.
+The pin configuration is currently made for a custom PCB. If you want to try it on nRF52840 DK, you can use the following configuration:
 
 ### Code to change:
 ```rust=
@@ -34,13 +34,13 @@ let dc = Output::new(<dc>, Level::High, OutputDrive::Standard);
 let mut backlight = Output::new(<led>, Level::High, OutputDrive::Standard);
 ```
 
-| In code   | Why                                     | Name on screen | Pin on nRF52840 DK |
+| In code   | Description                             | Name on screen | Pin on nRF52840 DK |
 | --------- | --------------------------------------- | -------------- | ------------------ |
-| sck       | Clock                                   | SCK            | `P0_04`            |
-| mosi      | Serial DAta                             | SDA            | `P0_28`            |
-| cs        | Chip Select (choosing peripheral)       | CS             | `P0_30`            |
-| dc        | data/command selection                  | A0             | `P0_29`            |
-| backlight | Background light  (try to change it 😊) | LED            | `P0_03`            |
-| x         | Ground                                  | GND            | `GND`                |
-| x         | Power                                   | VCC            | `5V`                 |
+| sck       | SPI clock                               | SCK            | `P0_04`            |
+| mosi      | SPI data                                | SDA            | `P0_28`            |
+| cs        | SPI chip select                         | CS             | `P0_30`            |
+| dc        | Data/command selection                  | A0             | `P0_29`            |
+| backlight | Backglight  (try to change it 😊)       | LED            | `P0_03`            |
+| x         | GND                                     | GND            | `GND`              |
+| x         | Power (3V3-5V)                          | VCC            | `5V`               |
 
