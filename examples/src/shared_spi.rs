@@ -1,6 +1,5 @@
 use core::{fmt::Debug, future::Future};
 use embassy::blocking_mutex::raw::RawMutex;
-// use embassy::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy::mutex::Mutex;
 
 use embedded_hal::digital::blocking::OutputPin;
@@ -37,6 +36,8 @@ impl<'a, M: RawMutex, BUS, CS> SpiDeviceWithCs<'a, M, BUS, CS> {
     pub fn new(bus: &'a Mutex<M, BUS>, cs: CS) -> Self {
         Self { bus, cs }
     }
+    unsafe fn yolo<'b, T>(t: &'a mut T) -> &'b mut T { core::mem::transmute(t) }
+
 }
 
 impl<'a, M: RawMutex, BUS, CS> spi::ErrorType for SpiDeviceWithCs<'a, M, BUS, CS>
@@ -49,8 +50,8 @@ where
 
 impl<M, BUS, CS> spi::SpiDevice for SpiDeviceWithCs<'_, M, BUS, CS>
 where
-    M: RawMutex,
-    BUS: spi::SpiBusFlush,
+    M: RawMutex + 'static,
+    BUS: spi::SpiBusFlush + 'static,
     CS: OutputPin,
 {
     type Bus = BUS;
@@ -70,11 +71,12 @@ where
                 ),
             > + 'a,
     {
+
         async move {
             let mut bus = self.bus.lock().await;
             self.cs.set_low().map_err(SpiDeviceWithCsError::Cs)?;
 
-            let (bus, f_res) = f(&mut bus).await;
+            let (bus, f_res) = f(unsafe { SpiDeviceWithCs::<'_, M, BUS, CS>::yolo(&mut bus) }).await;
 
             // On failure, it's important to still flush and deassert CS.
             let flush_res = bus.flush().await;
