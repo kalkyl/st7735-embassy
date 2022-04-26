@@ -4,18 +4,15 @@
 #![feature(type_alias_impl_trait)]
 
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
+use tinybmp::Bmp;
 
 use embassy::executor::Spawner;
 use embassy::time::{Delay, Duration, Timer};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::{interrupt, spim, Peripherals};
-use embedded_graphics::{
-    image::{Image, ImageRaw, ImageRawLE},
-    pixelcolor::Rgb565,
-    prelude::*,
-};
-use st7735_embassy::{self, ST7735};
+use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use embedded_hal_async::spi::ExclusiveDevice;
+use st7735_embassy::{self, ST7735};
 
 #[embassy::main]
 async fn main(_spawner: Spawner, p: Peripherals) {
@@ -37,9 +34,10 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 
-    let image_raw: ImageRawLE<Rgb565> =
-        ImageRaw::new(include_bytes!("../../assets/ferris.raw"), 86);
-    let image: Image<_> = Image::new(&image_raw, Point::new(34, 24));
+    let raw_image: Bmp<Rgb565> =
+        Bmp::from_slice(include_bytes!("../../assets/ferris.bmp")).unwrap();
+    let ferris = Image::new(&raw_image, Point::new(32, 32));
+
     image.draw(&mut display).unwrap();
     display.flush().await.unwrap();
 

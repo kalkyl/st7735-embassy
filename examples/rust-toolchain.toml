@@ -1,5 +1,4 @@
-# Copied from Embassy toolchain file
-# https://github.com/embassy-rs/embassy/blob/master/rust-toolchain.toml
+# From Embassy rs official toolchain https://github.com/embassy-rs/embassy/blob/master/rust-toolchain.toml
 # Before upgrading check that everything is available on all tier1 targets here:
 # https://rust-lang.github.io/rustup-components-history
 [toolchain]
