@@ -165,7 +165,7 @@ where
                         dc.set_high().ok();
                         let mut buf = [0_u8; 8];
                         buf[..params.len()].copy_from_slice(params);
-                        bus.write(&buf[..data.len()]).await?;
+                        bus.write(&buf[..params.len()]).await?;
                     }
                     if delay_time > 0 {
                         delay.delay_ms(delay_time).await.ok();
@@ -223,7 +223,7 @@ where
                     dc.set_high().ok();
                     let mut buf = [0_u8; 8];
                     buf[..params.len()].copy_from_slice(params);
-                    bus.write(&buf[..data.len()]).await?;
+                    bus.write(&buf[..params.len()]).await?;
                 }
                 Ok(())
             })
