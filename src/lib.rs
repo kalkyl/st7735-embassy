@@ -150,7 +150,7 @@ where
 
         self.spi
             .transaction(move |bus| async move {
-                let mut res = Ok(());
+                let bus = unsafe { &mut *bus };
                 for Command {
                     instruction,
                     params,
@@ -160,32 +160,18 @@ where
                     dc.set_low().ok();
                     let mut data = [0_u8; 1];
                     data.copy_from_slice(&[instruction as u8]);
-                    res = unsafe {
-                        <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &data).await
-                    };
-                    if res.is_err() {
-                        break;
-                    }
+                    bus.write(&data).await?;
                     if !params.is_empty() {
                         dc.set_high().ok();
                         let mut buf = [0_u8; 8];
                         buf[..params.len()].copy_from_slice(params);
-                        res = unsafe {
-                            <SPI as SpiDevice>::Bus::write(
-                                bus.as_mut().unwrap(),
-                                &buf[..data.len()],
-                            )
-                            .await
-                        };
-                        if res.is_err() {
-                            break;
-                        }
+                        bus.write(&buf[..data.len()]).await?;
                     }
                     if delay_time > 0 {
                         delay.delay_ms(delay_time).await.ok();
                     }
                 }
-                res
+                Ok(())
             })
             .await
             .map_err(Error::Comm)?;
@@ -228,22 +214,18 @@ where
         let dc = &mut self.dc;
         self.spi
             .transaction(move |bus| async move {
+                let bus = unsafe { &mut *bus };
                 dc.set_low().ok();
                 let mut data = [0_u8; 1];
                 data.copy_from_slice(&[instruction as u8]);
-                let res =
-                    unsafe { <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &data).await };
-                if res.is_ok() && !params.is_empty() {
+                bus.write(&data).await?;
+                if !params.is_empty() {
                     dc.set_high().ok();
                     let mut buf = [0_u8; 8];
                     buf[..params.len()].copy_from_slice(params);
-                    unsafe {
-                        <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &buf[..data.len()])
-                            .await
-                    }
-                } else {
-                    res
+                    bus.write(&buf[..data.len()]).await?;
                 }
+                Ok(())
             })
             .await
             .map_err(Error::Comm)?;
