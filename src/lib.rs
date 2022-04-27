@@ -160,7 +160,9 @@ where
                     dc.set_low().ok();
                     let mut data = [0_u8; 1];
                     data.copy_from_slice(&[instruction as u8]);
-                    res = bus.write(&data).await;
+                    res = unsafe {
+                        <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &data).await
+                    };
                     if res.is_err() {
                         break;
                     }
@@ -168,7 +170,13 @@ where
                         dc.set_high().ok();
                         let mut buf = [0_u8; 8];
                         buf[..params.len()].copy_from_slice(params);
-                        res = bus.write(&buf[..data.len()]).await;
+                        res = unsafe {
+                            <SPI as SpiDevice>::Bus::write(
+                                bus.as_mut().unwrap(),
+                                &buf[..data.len()],
+                            )
+                            .await
+                        };
                         if res.is_err() {
                             break;
                         }
@@ -177,7 +185,7 @@ where
                         delay.delay_ms(delay_time).await.ok();
                     }
                 }
-                (bus, res)
+                res
             })
             .await
             .map_err(Error::Comm)?;
@@ -223,15 +231,18 @@ where
                 dc.set_low().ok();
                 let mut data = [0_u8; 1];
                 data.copy_from_slice(&[instruction as u8]);
-                let res = bus.write(&data).await;
+                let res =
+                    unsafe { <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &data).await };
                 if res.is_ok() && !params.is_empty() {
                     dc.set_high().ok();
                     let mut buf = [0_u8; 8];
                     buf[..params.len()].copy_from_slice(params);
-                    let res = bus.write(&buf[..data.len()]).await;
-                    (bus, res)
+                    unsafe {
+                        <SPI as SpiDevice>::Bus::write(bus.as_mut().unwrap(), &buf[..data.len()])
+                            .await
+                    }
                 } else {
-                    (bus, res)
+                    res
                 }
             })
             .await

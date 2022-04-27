@@ -7,6 +7,7 @@ pub use embedded_hal::spi::{
     blocking, Error, ErrorKind, ErrorType, Mode, Phase, Polarity, MODE_0, MODE_1, MODE_2, MODE_3,
 };
 use embedded_hal_async::spi;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum SpiDeviceWithCsError<BUS, CS> {
     #[allow(unused)] // will probably use in the future when adding a flush() to SpiBus
@@ -36,10 +37,6 @@ impl<'a, M: RawMutex, BUS, CS> SpiDeviceWithCs<'a, M, BUS, CS> {
     pub fn new(bus: &'a Mutex<M, BUS>, cs: CS) -> Self {
         Self { bus, cs }
     }
-
-    unsafe fn upgrade_lifetime<'b, T>(t: &'a mut T) -> &'b mut T {
-        core::mem::transmute(t)
-    }
 }
 
 impl<'a, M: RawMutex, BUS, CS> spi::ErrorType for SpiDeviceWithCs<'a, M, BUS, CS>
@@ -60,25 +57,20 @@ where
 
     type TransactionFuture<'a, R, F, Fut> = impl Future<Output = Result<R, Self::Error>> + 'a
     where
-        Self: 'a, R: 'a, F: FnOnce(&'a mut Self::Bus) -> Fut + 'a,
-        Fut: Future<Output = (&'a mut Self::Bus, Result<R, <Self::Bus as ErrorType>::Error>)> + 'a;
+        Self: 'a, R: 'a, F: FnOnce(*mut Self::Bus) -> Fut + 'a,
+        Fut: Future<Output =  Result<R, <Self::Bus as ErrorType>::Error>> + 'a;
+
     fn transaction<'a, R, F, Fut>(&'a mut self, f: F) -> Self::TransactionFuture<'a, R, F, Fut>
     where
         R: 'a,
-        F: FnOnce(&'a mut Self::Bus) -> Fut + 'a,
-        Fut: Future<
-                Output = (
-                    &'a mut Self::Bus,
-                    Result<R, <Self::Bus as ErrorType>::Error>,
-                ),
-            > + 'a,
+        F: FnOnce(*mut Self::Bus) -> Fut + 'a,
+        Fut: Future<Output = Result<R, <Self::Bus as ErrorType>::Error>> + 'a,
     {
         async move {
             let mut bus = self.bus.lock().await;
             self.cs.set_low().map_err(SpiDeviceWithCsError::Cs)?;
 
-            let (bus, f_res) =
-                f(unsafe { SpiDeviceWithCs::<'_, M, BUS, CS>::upgrade_lifetime(&mut bus) }).await;
+            let f_res = f(&mut *bus).await;
 
             // On failure, it's important to still flush and deassert CS.
             let flush_res = bus.flush().await;

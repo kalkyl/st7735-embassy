@@ -10,11 +10,7 @@ use embassy::executor::Spawner;
 use embassy::time::{Delay, Duration, Timer};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::{interrupt, peripherals::SPI3, spim, Peripherals};
-use embedded_graphics::{
-    image::{Image, ImageRaw, ImageRawLE},
-    pixelcolor::Rgb565,
-    prelude::*,
-};
+use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use nrf_embassy::shared_spi::SpiDeviceWithCs;
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;

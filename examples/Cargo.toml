@@ -21,6 +21,10 @@ embedded-graphics = "0.7.1"
 embedded-hal-async = { version = "0.1.0-alpha.0" }
 tinybmp = "0.3.1" 
 
+[patch.crates-io]
+embedded-hal-async = { git = "https://github.com/rust-embedded/embedded-hal" }
+embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal" }
+
 [features]
 # set logging levels here
 default = ["embassy-nrf/nrf52840"]
