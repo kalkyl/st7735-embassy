@@ -19,20 +19,17 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
     let irq = interrupt::take!(SPIM3);
-    let spim = spim::Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
-    let cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
+    // spim args: spi instance, irq, sck, mosi/SDA, config
+    let spim = spim::Spim::new_txonly(p.SPI3, irq, p.P0_04, p.P0_28, config);
+    // cs_pin: chip select pin
+    let cs_pin = Output::new(p.P0_30, Level::Low, OutputDrive::Standard);
     let spi_dev = ExclusiveDevice::new(spim, cs_pin);
 
-<<<<<<< HEAD
     // rst:  display reset pin, managed at driver level
     let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
     // dc: data/command selection pin, managed at driver level
 
     let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
-=======
-    let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
-    let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
->>>>>>> shared-bus
 
     let mut display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
     display.init(&mut Delay).await.unwrap();
@@ -45,7 +42,8 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     image.draw(&mut display).unwrap();
     display.flush().await.unwrap();
 
-    let mut backlight = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
+    // LED is set to max, but can be modulated with pwm to change backlight brightness
+    let mut backlight = Output::new(p.P0_03, Level::High, OutputDrive::Standard);
     loop {
         backlight.set_high();
         Timer::after(Duration::from_millis(700)).await;
