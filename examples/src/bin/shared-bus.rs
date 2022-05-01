@@ -32,7 +32,6 @@ async fn display_task(
         >,
         Output<'static, P0_20>,
         Output<'static, P0_22>,
-        core::convert::Infallible,
     >,
 ) {
     display.init(&mut Delay).await.unwrap();

@@ -2,6 +2,7 @@
 
 pub mod instruction;
 use crate::instruction::Instruction;
+use core::convert::Infallible;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal_async::delay::DelayUs;
 use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice, SpiDeviceExt};
@@ -10,12 +11,12 @@ use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice, SpiDeviceExt};
 const BUF_SIZE: usize = 128 * 160 * 2;
 
 /// Async ST7735 LCD display driver.
-pub struct ST7735IF<SPI, DC, RST, PinE>
+pub struct ST7735IF<SPI, DC, RST>
 where
     SPI: SpiDevice,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
     /// SPI
     spi: SPI,
@@ -32,14 +33,14 @@ where
     dy: u16,
     orientation: Orientation,
 }
-pub struct ST7735<SPI, DC, RST, PinE>
+pub struct ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
-    iface: ST7735IF<SPI, DC, RST, PinE>,
+    iface: ST7735IF<SPI, DC, RST>,
     width: u32,
     height: u32,
     buffer: [u8; BUF_SIZE],
@@ -70,12 +71,12 @@ impl Default for Config {
     }
 }
 
-impl<SPI, DC, RST, E, PinE> ST7735IF<SPI, DC, RST, PinE>
+impl<SPI, DC, RST, E> ST7735IF<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
     /// Creates a new driver instance that uses hardware SPI.
     pub fn new(spi: SPI, dc: DC, rst: RST, config: Config) -> Self {
@@ -92,7 +93,7 @@ where
     }
 
     /// Runs commands to initialize the display.
-    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
+    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
         D: DelayUs,
     {
@@ -180,7 +181,7 @@ where
         Ok(())
     }
 
-    pub async fn hard_reset<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
+    pub async fn hard_reset<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
         D: DelayUs,
     {
@@ -191,10 +192,7 @@ where
         self.rst.set_high().map_err(Error::Pin)
     }
 
-    pub async fn set_orientation(
-        &mut self,
-        orientation: Orientation,
-    ) -> Result<(), Error<E, PinE>> {
+    pub async fn set_orientation(&mut self, orientation: Orientation) -> Result<(), Error<E>> {
         if self.rgb {
             self.write_command(Instruction::MADCTL, &[orientation as u8])
                 .await?;
@@ -210,7 +208,7 @@ where
         &mut self,
         instruction: Instruction,
         params: &[u8],
-    ) -> Result<(), Error<E, PinE>> {
+    ) -> Result<(), Error<E>> {
         let dc = &mut self.dc;
         self.spi
             .transaction(move |bus| async move {
@@ -232,11 +230,11 @@ where
         Ok(())
     }
 
-    fn start_data(&mut self) -> Result<(), Error<E, PinE>> {
+    fn start_data(&mut self) -> Result<(), Error<E>> {
         self.dc.set_high().map_err(Error::Pin)
     }
 
-    async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<E, PinE>> {
+    async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<E>> {
         let mut buf = [0_u8; 8];
         buf[..data.len()].copy_from_slice(data);
         self.spi
@@ -258,7 +256,7 @@ where
         sy: u16,
         ex: u16,
         ey: u16,
-    ) -> Result<(), Error<E, PinE>> {
+    ) -> Result<(), Error<E>> {
         self.write_command(Instruction::CASET, &[]).await?;
         self.start_data()?;
         let sx_bytes = (sx + self.dx).to_be_bytes();
@@ -273,10 +271,7 @@ where
             .await
     }
 
-    pub async fn flush_frame<const N: usize>(
-        &mut self,
-        frame: &Frame<N>,
-    ) -> Result<(), Error<E, PinE>> {
+    pub async fn flush_frame<const N: usize>(&mut self, frame: &Frame<N>) -> Result<(), Error<E>> {
         self.set_address_window(0, 0, frame.width as u16 - 1, frame.height as u16 - 1)
             .await?;
         self.write_command(Instruction::RAMWR, &[]).await?;
@@ -285,12 +280,12 @@ where
     }
 }
 
-impl<SPI, DC, RST, E, PinE> ST7735<SPI, DC, RST, PinE>
+impl<SPI, DC, RST, E> ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
     /// Creates a new driver instance that uses hardware SPI.
     pub fn new(spi: SPI, dc: DC, rst: RST, config: Config, width: u32, height: u32) -> Self {
@@ -303,7 +298,7 @@ where
     }
 
     /// Runs commands to initialize the display.
-    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E, PinE>>
+    pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
         D: DelayUs,
     {
@@ -312,7 +307,7 @@ where
         Ok(())
     }
 
-    pub async fn flush(&mut self) -> Result<(), Error<E, PinE>> {
+    pub async fn flush(&mut self) -> Result<(), Error<E>> {
         self.iface
             .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
             .await?;
@@ -322,7 +317,7 @@ where
         self.iface.spi.write(buf).await.map_err(Error::Comm)
     }
 
-    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<E, PinE>> {
+    pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<E>> {
         self.iface
             .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
             .await?;
@@ -370,12 +365,12 @@ use self::embedded_graphics_core::{
     prelude::*,
 };
 
-impl<SPI, DC, RST, E, PinE> DrawTarget for ST7735<SPI, DC, RST, PinE>
+impl<SPI, DC, RST, E> DrawTarget for ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
     type Error = ();
     type Color = Rgb565;
@@ -410,12 +405,12 @@ where
     }
 }
 
-impl<SPI, DC, RST, E, PinE> OriginDimensions for ST7735<SPI, DC, RST, PinE>
+impl<SPI, DC, RST, E> OriginDimensions for ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
-    DC: OutputPin<Error = PinE>,
-    RST: OutputPin<Error = PinE>,
+    DC: OutputPin<Error = Infallible>,
+    RST: OutputPin<Error = Infallible>,
 {
     fn size(&self) -> Size {
         Size::new(self.width, self.height)
@@ -423,11 +418,11 @@ where
 }
 
 #[derive(Debug)]
-pub enum Error<E = (), PinE = ()> {
+pub enum Error<E = ()> {
     /// Communication error
     Comm(E),
     /// Pin setting error
-    Pin(PinE),
+    Pin(Infallible),
 }
 
 pub struct Frame<const N: usize> {
