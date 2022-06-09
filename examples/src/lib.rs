@@ -5,7 +5,6 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 pub use defmt::*;
 use defmt_rtt as _; // global logger
 use panic_probe as _;
-pub mod shared_spi;
 
 // same panicking *behavior* as `panic-probe` but doesn't print a panic message
 // this prevents the panic message being printed *twice* when `defmt::panic` is invoked

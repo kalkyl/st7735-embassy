@@ -7,9 +7,5 @@ edition = "2021"
 
 [dependencies]
 embedded-hal = "0.2.3"
-embedded-hal-async = { version = "0.1.0-alpha.0" }
+embedded-hal-async = { version = "0.1.0-alpha.1" }
 embedded-graphics-core = "0.3.3"
-
-[patch.crates-io]
-embedded-hal-async = { git = "https://github.com/rust-embedded/embedded-hal" }
-embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal" }

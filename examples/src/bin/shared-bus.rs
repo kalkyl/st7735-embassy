@@ -17,14 +17,14 @@ use embassy_nrf::{
     spim, Peripherals,
 };
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
-use nrf_embassy::shared_spi::SpiDeviceWithCs;
+use embassy_embedded_hal::shared_bus::spi::SpiBusDevice;
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;
 
 #[embassy::task]
 async fn display_task(
     mut display: ST7735<
-        SpiDeviceWithCs<
+        SpiBusDevice<
             'static,
             ThreadModeRawMutex,
             spim::Spim<'static, SPI3>,
@@ -49,13 +49,12 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
     let irq = interrupt::take!(SPIM3);
-    let spi_bus = Mutex::<ThreadModeRawMutex, spim::Spim<SPI3>>::new(spim::Spim::new_txonly(
-        p.SPI3, irq, p.P0_15, p.P0_18, config,
-    ));
+    let spi = spim::Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
+    let spi_bus = Mutex::<ThreadModeRawMutex, _>::new(spi);
     let spi_bus = SPI_BUS.put(spi_bus);
 
     let cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
-    let spi_dev = SpiDeviceWithCs::new(spi_bus, cs_pin);
+    let spi_dev = SpiBusDevice::new(spi_bus, cs_pin);
     let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
     let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
     let display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);

@@ -5,7 +5,7 @@ use crate::instruction::Instruction;
 use core::convert::Infallible;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal_async::delay::DelayUs;
-use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice, SpiDeviceExt};
+use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice};
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
