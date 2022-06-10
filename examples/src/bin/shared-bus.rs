@@ -21,11 +21,11 @@ use embassy_nrf::{
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;
-type SpiBus =
+type SpiDev =
     SpiBusDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
 
 #[embassy::task]
-async fn display_task(mut display: ST7735<SpiBus, Output<'static, P0_20>, Output<'static, P0_22>>) {
+async fn display_task(mut display: ST7735<SpiDev, Output<'static, P0_20>, Output<'static, P0_22>>) {
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
     let raw_image: Bmp<Rgb565> =
