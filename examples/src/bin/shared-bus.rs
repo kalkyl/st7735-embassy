@@ -10,30 +10,22 @@ use embassy::executor::Spawner;
 use embassy::mutex::Mutex;
 use embassy::time::{Delay, Duration, Timer};
 use embassy::util::Forever;
+use embassy_embedded_hal::shared_bus::spi::SpiBusDevice;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::{
     interrupt,
     peripherals::{P0_20, P0_22, P0_24, SPI3},
-    spim, Peripherals,
+    spim::{Config, Frequency, Spim},
+    Peripherals,
 };
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
-use embassy_embedded_hal::shared_bus::spi::SpiBusDevice;
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;
+type SpiBus =
+    SpiBusDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
 
 #[embassy::task]
-async fn display_task(
-    mut display: ST7735<
-        SpiBusDevice<
-            'static,
-            ThreadModeRawMutex,
-            spim::Spim<'static, SPI3>,
-            Output<'static, P0_24>,
-        >,
-        Output<'static, P0_20>,
-        Output<'static, P0_22>,
-    >,
-) {
+async fn display_task(mut display: ST7735<SpiBus, Output<'static, P0_20>, Output<'static, P0_22>>) {
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
     let raw_image: Bmp<Rgb565> =
@@ -45,11 +37,11 @@ async fn display_task(
 
 #[embassy::main]
 async fn main(spawner: Spawner, p: Peripherals) {
-    static SPI_BUS: Forever<Mutex<ThreadModeRawMutex, spim::Spim<SPI3>>> = Forever::new();
-    let mut config = spim::Config::default();
-    config.frequency = spim::Frequency::M32;
+    static SPI_BUS: Forever<Mutex<ThreadModeRawMutex, Spim<SPI3>>> = Forever::new();
+    let mut config = Config::default();
+    config.frequency = Frequency::M32;
     let irq = interrupt::take!(SPIM3);
-    let spi = spim::Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
+    let spi = Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
     let spi_bus = Mutex::<ThreadModeRawMutex, _>::new(spi);
     let spi_bus = SPI_BUS.put(spi_bus);
 
