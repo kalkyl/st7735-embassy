@@ -5,12 +5,12 @@
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
 use defmt::*;
-use embassy::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy::executor::Spawner;
-use embassy::mutex::Mutex;
-use embassy::time::{Delay, Duration, Timer};
-use embassy::util::Forever;
-use embassy_embedded_hal::shared_bus::spi::SpiBusDevice;
+use embassy_executor::executor::Spawner;
+use embassy_executor::time::{Delay, Duration, Timer};
+use embassy_util::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_util::mutex::Mutex;
+use embassy_util::Forever;
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::{
     interrupt,
@@ -22,9 +22,9 @@ use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;
 type SpiDev =
-    SpiBusDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
+    SpiDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
 
-#[embassy::task]
+#[embassy_executor::task]
 async fn display_task(mut display: ST7735<SpiDev, Output<'static, P0_20>, Output<'static, P0_22>>) {
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
@@ -35,7 +35,7 @@ async fn display_task(mut display: ST7735<SpiDev, Output<'static, P0_20>, Output
     display.flush().await.unwrap();
 }
 
-#[embassy::main]
+#[embassy_executor::main]
 async fn main(spawner: Spawner, p: Peripherals) {
     static SPI_BUS: Forever<Mutex<ThreadModeRawMutex, Spim<SPI3>>> = Forever::new();
     let mut config = Config::default();
@@ -46,7 +46,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let spi_bus = SPI_BUS.put(spi_bus);
 
     let cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
-    let spi_dev = SpiBusDevice::new(spi_bus, cs_pin);
+    let spi_dev = SpiDevice::new(spi_bus, cs_pin);
     let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
     let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
     let display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);

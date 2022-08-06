@@ -4,10 +4,10 @@
 #![feature(type_alias_impl_trait)]
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
-use embassy::channel::signal::Signal;
-use embassy::executor::Spawner;
-use embassy::time::{Delay, Duration, Timer};
-use embassy::util::Forever;
+use embassy_executor::executor::Spawner;
+use embassy_executor::time::{Delay, Duration, Timer};
+use embassy_util::channel::signal::Signal;
+use embassy_util::Forever;
 use embassy_nrf::{
     gpio::{Level, Output, OutputDrive},
     interrupt,
@@ -25,7 +25,7 @@ static FRAME_B: Forever<Frame<BUF_SIZE>> = Forever::new();
 static NEXT_FRAME: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
 static READY_FRAME: Forever<Signal<&'static mut Frame<BUF_SIZE>>> = Forever::new();
 
-#[embassy::task]
+#[embassy_executor::task]
 async fn render(
     spi_dev: ExclusiveDevice<Spim<'static, SPI3>, Output<'static, P0_24>>,
     dc: Output<'static, P0_20>,
@@ -43,7 +43,7 @@ async fn render(
     }
 }
 
-#[embassy::main(config = "config()")]
+#[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
