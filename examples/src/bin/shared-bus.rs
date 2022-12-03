@@ -5,24 +5,22 @@
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
 use defmt::*;
-use embassy_executor::executor::Spawner;
-use embassy_executor::time::{Delay, Duration, Timer};
-use embassy_util::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy_util::mutex::Mutex;
-use embassy_util::Forever;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
+use embassy_executor::Spawner;
+use embassy_executor::_export::StaticCell;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::{
     interrupt,
     peripherals::{P0_20, P0_22, P0_24, SPI3},
     spim::{Config, Frequency, Spim},
-    Peripherals,
 };
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::mutex::Mutex;
+use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use st7735_embassy::{self, ST7735};
 use tinybmp::Bmp;
-type SpiDev =
-    SpiDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
+type SpiDev = SpiDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, P0_24>>;
 
 #[embassy_executor::task]
 async fn display_task(mut display: ST7735<SpiDev, Output<'static, P0_20>, Output<'static, P0_22>>) {
@@ -36,14 +34,15 @@ async fn display_task(mut display: ST7735<SpiDev, Output<'static, P0_20>, Output
 }
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner, p: Peripherals) {
-    static SPI_BUS: Forever<Mutex<ThreadModeRawMutex, Spim<SPI3>>> = Forever::new();
+async fn main(spawner: Spawner) {
+    let p = embassy_nrf::init(Default::default());
+    static SPI_BUS: StaticCell<Mutex<ThreadModeRawMutex, Spim<SPI3>>> = StaticCell::new();
     let mut config = Config::default();
     config.frequency = Frequency::M32;
     let irq = interrupt::take!(SPIM3);
     let spi = Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
-    let spi_bus = Mutex::<ThreadModeRawMutex, _>::new(spi);
-    let spi_bus = SPI_BUS.put(spi_bus);
+    let spi_bus = Mutex::new(spi);
+    let spi_bus = SPI_BUS.init(spi_bus);
 
     let cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
     let spi_dev = SpiDevice::new(spi_bus, cs_pin);

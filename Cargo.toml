@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 embedded-hal = "0.2.3"
-embedded-hal-async = { version = "0.1.0-alpha.1" }
+embedded-hal-async = { version = "=0.2.0-alpha.0" }
 embedded-graphics-core = "0.3.3"

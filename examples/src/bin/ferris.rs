@@ -6,16 +6,17 @@
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 use tinybmp::Bmp;
 
-use embassy_executor::executor::Spawner;
-use embassy_executor::time::{Delay, Duration, Timer};
+use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::{interrupt, spim, Peripherals};
+use embassy_nrf::{interrupt, spim};
+use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use embedded_hal_async::spi::ExclusiveDevice;
 use st7735_embassy::{self, ST7735};
 
 #[embassy_executor::main]
-async fn main(_spawner: Spawner, p: Peripherals) {
+async fn main(_spawner: Spawner) {
+    let p = embassy_nrf::init(Default::default());
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
     let irq = interrupt::take!(SPIM3);

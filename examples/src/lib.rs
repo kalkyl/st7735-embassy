@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 use core::sync::atomic::{AtomicUsize, Ordering};
 pub use defmt::*;
