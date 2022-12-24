@@ -13,8 +13,9 @@ use embassy_nrf::{
     spim::{self, Spim},
 };
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use futures::StreamExt;
 use embassy_sync::signal::Signal;
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Ticker};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_hal_async::spi::ExclusiveDevice;
 use st7735_embassy::{self, Frame, ST7735IF};
@@ -70,6 +71,7 @@ async fn main(spawner: Spawner) {
 
     let mut x = 0;
     let mut y = 0;
+    let mut ticker = Ticker::every(Duration::from_millis(15));
     loop {
         let frame = NEXT_FRAME.wait().await;
         // frame.clear(Rgb565::BLACK).unwrap();
@@ -77,6 +79,6 @@ async fn main(spawner: Spawner) {
         READY_FRAME.signal(frame);
         x = (x + 1) % 160;
         y = (y + 1) % 128;
-        Timer::after(Duration::from_millis(10)).await;
+        ticker.next().await;
     }
 }
