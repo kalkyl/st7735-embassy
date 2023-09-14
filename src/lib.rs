@@ -3,9 +3,9 @@
 pub mod instruction;
 use crate::instruction::Instruction;
 use core::convert::Infallible;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use embedded_hal_async::delay::DelayUs;
-use embedded_hal_async::spi::{SpiBus, SpiBusWrite, SpiDevice};
+use embedded_hal_async::spi::{SpiDevice};
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
@@ -14,7 +14,6 @@ const BUF_SIZE: usize = 128 * 160 * 2;
 pub struct ST7735IF<SPI, DC, RST>
 where
     SPI: SpiDevice,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
@@ -36,7 +35,6 @@ where
 pub struct ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
@@ -74,7 +72,6 @@ impl Default for Config {
 impl<SPI, DC, RST, E> ST7735IF<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
@@ -149,9 +146,6 @@ where
             Command::new(Instruction::DISPON, &[], 200),
         ];
 
-        self.spi
-            .transaction(move |bus| async move {
-                let bus = unsafe { &mut *bus };
                 for Command {
                     instruction,
                     params,
@@ -161,21 +155,18 @@ where
                     dc.set_low().ok();
                     let mut data = [0_u8; 1];
                     data.copy_from_slice(&[instruction as u8]);
-                    bus.write(&data).await?;
+                    self.spi.write(&data).await.map_err(Error::Comm)?;
                     if !params.is_empty() {
                         dc.set_high().ok();
                         let mut buf = [0_u8; 8];
                         buf[..params.len()].copy_from_slice(params);
-                        bus.write(&buf[..params.len()]).await?;
+                        self.spi.write(&buf[..params.len()]).await.map_err(Error::Comm)?;
                     }
                     if delay_time > 0 {
-                        delay.delay_ms(delay_time).await.ok();
+                        delay.delay_ms(delay_time).await;
                     }
                 }
-                Ok(())
-            })
-            .await
-            .map_err(Error::Comm)?;
+            
 
         self.set_orientation(self.orientation).await?;
         Ok(())
@@ -186,9 +177,9 @@ where
         D: DelayUs,
     {
         self.rst.set_high().map_err(Error::Pin)?;
-        delay.delay_ms(10).await.ok();
+        delay.delay_ms(10).await;
         self.rst.set_low().map_err(Error::Pin)?;
-        delay.delay_ms(10).await.ok();
+        delay.delay_ms(10).await;
         self.rst.set_high().map_err(Error::Pin)
     }
 
@@ -210,23 +201,16 @@ where
         params: &[u8],
     ) -> Result<(), Error<E>> {
         let dc = &mut self.dc;
-        self.spi
-            .transaction(move |bus| async move {
-                let bus = unsafe { &mut *bus };
-                dc.set_low().ok();
-                let mut data = [0_u8; 1];
-                data.copy_from_slice(&[instruction as u8]);
-                bus.write(&data).await?;
-                if !params.is_empty() {
-                    dc.set_high().ok();
-                    let mut buf = [0_u8; 8];
-                    buf[..params.len()].copy_from_slice(params);
-                    bus.write(&buf[..params.len()]).await?;
-                }
-                Ok(())
-            })
-            .await
-            .map_err(Error::Comm)?;
+        dc.set_low().ok();
+        let mut data = [0_u8; 1];
+        data.copy_from_slice(&[instruction as u8]);
+        self.spi.write(&data).await.map_err(Error::Comm)?;
+        if !params.is_empty() {
+            dc.set_high().ok();
+            let mut buf = [0_u8; 8];
+            buf[..params.len()].copy_from_slice(params);
+            self.spi.write(&buf[..params.len()]).await.map_err(Error::Comm)?;
+        }
         Ok(())
     }
 
@@ -283,7 +267,6 @@ where
 impl<SPI, DC, RST, E> ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
@@ -368,7 +351,6 @@ use self::embedded_graphics_core::{
 impl<SPI, DC, RST, E> DrawTarget for ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
@@ -408,7 +390,6 @@ where
 impl<SPI, DC, RST, E> OriginDimensions for ST7735<SPI, DC, RST>
 where
     SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {

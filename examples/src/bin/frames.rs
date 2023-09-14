@@ -2,22 +2,24 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
-use embassy_executor::Spawner;
 use embassy_executor::_export::StaticCell;
+use embassy_executor::Spawner;
 use embassy_nrf::{
-    gpio::{Level, Output, OutputDrive},
-    interrupt,
-    peripherals::{P0_20, P0_22, P0_24, SPI3},
+    bind_interrupts,
+    gpio::{AnyPin, Level, Output, OutputDrive},
+    peripherals::{self, SPI3},
     spim::{self, Spim},
 };
+use embassy_nrf::gpio::Pin;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-use futures::StreamExt;
 use embassy_sync::signal::Signal;
 use embassy_time::{Delay, Duration, Ticker};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use embedded_hal_async::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::NoDelay;
 use st7735_embassy::{self, Frame, ST7735IF};
 
 const BUF_SIZE: usize = 160 * 128 * 2;
@@ -30,9 +32,9 @@ static READY_FRAME: Signal<ThreadModeRawMutex, &'static mut Frame<BUF_SIZE>> =
 
 #[embassy_executor::task]
 async fn render(
-    spi_dev: ExclusiveDevice<Spim<'static, SPI3>, Output<'static, P0_24>>,
-    dc: Output<'static, P0_20>,
-    rst: Output<'static, P0_22>
+    spi_dev: ExclusiveDevice<Spim<'static, SPI3>, Output<'static, AnyPin>, NoDelay>,
+    dc: Output<'static, AnyPin>,
+    rst: Output<'static, AnyPin>,
 ) {
     let mut display = ST7735IF::new(spi_dev, dc, rst, Default::default());
     display.init(&mut Delay).await.unwrap();
@@ -44,6 +46,11 @@ async fn render(
     }
 }
 
+bind_interrupts!(struct Irqs {
+    SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
+});
+
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = embassy_nrf::config::Config::default();
@@ -51,13 +58,12 @@ async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(config);
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
-    let irq = interrupt::take!(SPIM3);
-    let spim = spim::Spim::new_txonly(p.SPI3, irq, p.P0_15, p.P0_18, config);
-    let cs_pin = Output::new(p.P0_24, Level::Low, OutputDrive::Standard);
-    let spi_dev = ExclusiveDevice::new(spim, cs_pin);
+    let spim = spim::Spim::new_txonly(p.SPI3, Irqs, p.P1_05, p.P1_04, config);
+    let cs_pin = Output::new(p.P1_03.degrade(), Level::Low, OutputDrive::Standard);
+    let spi_dev = ExclusiveDevice::new(spim, cs_pin, NoDelay);
 
-    let dc = Output::new(p.P0_20, Level::High, OutputDrive::Standard);
-    let rst = Output::new(p.P0_22, Level::High, OutputDrive::Standard);
+    let dc = Output::new(p.P1_02.degrade(), Level::High, OutputDrive::Standard);
+    let rst = Output::new(p.P1_01.degrade(), Level::High, OutputDrive::Standard);
 
     let frame_a = FRAME_A.init(Default::default());
     NEXT_FRAME.signal(frame_a);
@@ -65,7 +71,7 @@ async fn main(spawner: Spawner) {
     let frame_b = FRAME_B.init(Default::default());
     READY_FRAME.signal(frame_b);
 
-    defmt::unwrap!(spawner.spawn(render(spi_dev, dc, rst)));
+    defmt::unwrap!(spawner.spawn(render(spi_dev, dc, rst.into())));
 
     let _backlight = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
 
