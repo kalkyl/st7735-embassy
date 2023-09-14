@@ -3,34 +3,44 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
-use tinybmp::Bmp;
 
 use embassy_executor::Spawner;
-use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::{interrupt, spim};
+use embassy_nrf::{
+    bind_interrupts,
+    gpio::{Level, Output, OutputDrive},
+    peripherals,
+    spim};
+use embassy_nrf::gpio::Pin;
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
-use embedded_hal_async::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::NoDelay;
+use tinybmp::Bmp;
+
 use st7735_embassy::{self, ST7735};
+
+bind_interrupts!(struct Irqs {
+    SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
+});
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
     let mut config = spim::Config::default();
     config.frequency = spim::Frequency::M32;
-    let irq = interrupt::take!(SPIM3);
     // spim args: spi instance, irq, sck, mosi/SDA, config
-    let spim = spim::Spim::new_txonly(p.SPI3, irq, p.P0_04, p.P0_28, config);
+    let spim = spim::Spim::new_txonly(p.SPI3, Irqs, p.P1_05, p.P1_04, config);
     // cs_pin: chip select pin
-    let cs_pin = Output::new(p.P0_30, Level::Low, OutputDrive::Standard);
-    let spi_dev = ExclusiveDevice::new(spim, cs_pin);
+    let cs_pin = Output::new(p.P1_03.degrade(), Level::Low, OutputDrive::Standard);
+    let spi_dev = ExclusiveDevice::new(spim, cs_pin, NoDelay);
 
     // rst:  display reset pin, managed at driver level
-    let rst = Output::new(p.P0_31, Level::High, OutputDrive::Standard);
+    let rst = Output::new(p.P1_01.degrade(), Level::High, OutputDrive::Standard);
     // dc: data/command selection pin, managed at driver level
 
-    let dc = Output::new(p.P0_29, Level::High, OutputDrive::Standard);
+    let dc = Output::new(p.P1_02.degrade(), Level::High, OutputDrive::Standard);
 
     let mut display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
     display.init(&mut Delay).await.unwrap();
