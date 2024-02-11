@@ -4,8 +4,8 @@ pub mod instruction;
 use crate::instruction::Instruction;
 use core::convert::Infallible;
 use embedded_hal::digital::OutputPin;
-use embedded_hal_async::delay::DelayUs;
-use embedded_hal_async::spi::{SpiDevice};
+use embedded_hal_async::delay::DelayNs;
+use embedded_hal_async::spi::SpiDevice;
 
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
@@ -92,7 +92,7 @@ where
     /// Runs commands to initialize the display.
     pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
-        D: DelayUs,
+        D: DelayNs,
     {
         self.hard_reset(delay).await?;
         let dc = &mut self.dc;
@@ -146,27 +146,29 @@ where
             Command::new(Instruction::DISPON, &[], 200),
         ];
 
-                for Command {
-                    instruction,
-                    params,
-                    delay_time,
-                } in commands
-                {
-                    dc.set_low().ok();
-                    let mut data = [0_u8; 1];
-                    data.copy_from_slice(&[instruction as u8]);
-                    self.spi.write(&data).await.map_err(Error::Comm)?;
-                    if !params.is_empty() {
-                        dc.set_high().ok();
-                        let mut buf = [0_u8; 8];
-                        buf[..params.len()].copy_from_slice(params);
-                        self.spi.write(&buf[..params.len()]).await.map_err(Error::Comm)?;
-                    }
-                    if delay_time > 0 {
-                        delay.delay_ms(delay_time).await;
-                    }
-                }
-            
+        for Command {
+            instruction,
+            params,
+            delay_time,
+        } in commands
+        {
+            dc.set_low().ok();
+            let mut data = [0_u8; 1];
+            data.copy_from_slice(&[instruction as u8]);
+            self.spi.write(&data).await.map_err(Error::Comm)?;
+            if !params.is_empty() {
+                dc.set_high().ok();
+                let mut buf = [0_u8; 8];
+                buf[..params.len()].copy_from_slice(params);
+                self.spi
+                    .write(&buf[..params.len()])
+                    .await
+                    .map_err(Error::Comm)?;
+            }
+            if delay_time > 0 {
+                delay.delay_ms(delay_time).await;
+            }
+        }
 
         self.set_orientation(self.orientation).await?;
         Ok(())
@@ -174,7 +176,7 @@ where
 
     pub async fn hard_reset<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
-        D: DelayUs,
+        D: DelayNs,
     {
         self.rst.set_high().map_err(Error::Pin)?;
         delay.delay_ms(10).await;
@@ -209,7 +211,10 @@ where
             dc.set_high().ok();
             let mut buf = [0_u8; 8];
             buf[..params.len()].copy_from_slice(params);
-            self.spi.write(&buf[..params.len()]).await.map_err(Error::Comm)?;
+            self.spi
+                .write(&buf[..params.len()])
+                .await
+                .map_err(Error::Comm)?;
         }
         Ok(())
     }
@@ -283,7 +288,7 @@ where
     /// Runs commands to initialize the display.
     pub async fn init<D>(&mut self, delay: &mut D) -> Result<(), Error<E>>
     where
-        D: DelayUs,
+        D: DelayNs,
     {
         self.iface.init(delay).await?;
 
@@ -320,7 +325,7 @@ where
             }
 
             Orientation::Portrait | Orientation::PortraitSwapped => {
-                if y as u32 >= self.width as u32 {
+                if y as u32 >= self.width {
                     return;
                 }
                 ((y as usize) * self.height as usize) + (x as usize)
@@ -433,7 +438,7 @@ impl<const N: usize> Frame<N> {
             }
 
             Orientation::Portrait | Orientation::PortraitSwapped => {
-                if y as u32 >= self.width as u32 {
+                if y as u32 >= self.width {
                     return;
                 }
                 ((y as usize) * self.height as usize) + (x as usize)
