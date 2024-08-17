@@ -170,9 +170,8 @@ where
         } in commands
         {
             dc.set_low().ok();
-            let mut data = [0_u8; 1];
-            data.copy_from_slice(&[instruction as u8]);
-            self.spi.write(&data).await.map_err(Error::Comm)?;
+            let data = &[instruction as u8];
+            self.spi.write(data).await.map_err(Error::Comm)?;
             if !params.is_empty() {
                 dc.set_high().ok();
                 let mut buf = [0_u8; 8];
@@ -217,9 +216,8 @@ where
     ) -> Result<(), Error<E>> {
         let dc = &mut self.dc;
         dc.set_low().ok();
-        let mut data = [0_u8; 1];
-        data.copy_from_slice(&[instruction as u8]);
-        self.spi.write(&data).await.map_err(Error::Comm)?;
+        let data = &[instruction as u8];
+        self.spi.write(data).await.map_err(Error::Comm)?;
         if !params.is_empty() {
             dc.set_high().ok();
             let mut buf = [0_u8; 8];
@@ -359,13 +357,10 @@ where
         } * 2;
 
         // Split 16 bit value into two bytes
-        let low = (color & 0xff) as u8;
-        let high = ((color & 0xff00) >> 8) as u8;
-        if idx >= self.buffer.len() - 1 {
-            return;
+        if let Some(pixel) = self.buffer.get_mut(idx..=idx + 1) {
+            let c = color.to_be_bytes();
+            pixel.copy_from_slice(c.as_slice())
         }
-        self.buffer[idx] = high;
-        self.buffer[idx + 1] = low;
     }
 
     /// Sets the global offset of the displayed image
@@ -412,12 +407,9 @@ where
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
         let c = RawU16::from(color).into_inner();
-        for i in 0..N {
-            self.buffer[i] = if i % 2 == 0 {
-                ((c & 0xff00) >> 8) as u8
-            } else {
-                (c & 0xff) as u8
-            };
+        let c = c.to_be_bytes();
+        for pixel in self.buffer.chunks_exact_mut(2) {
+            pixel.copy_from_slice(c.as_slice())
         }
         Ok(())
     }
@@ -479,13 +471,10 @@ impl<const N: usize> Frame<N> {
         } * 2;
 
         // Split 16 bit value into two bytes
-        let low = (color & 0xff) as u8;
-        let high = ((color & 0xff00) >> 8) as u8;
-        if idx >= self.buffer.len() - 1 {
-            return;
+        if let Some(pixel) = self.buffer.get_mut(idx..=idx + 1) {
+            let c = color.to_be_bytes();
+            pixel.copy_from_slice(c.as_slice())
         }
-        self.buffer[idx] = high;
-        self.buffer[idx + 1] = low;
     }
 }
 impl<const N: usize> Default for Frame<N> {
@@ -517,12 +506,9 @@ impl<const N: usize> DrawTarget for Frame<N> {
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
         let c = RawU16::from(color).into_inner();
-        for i in 0..N {
-            self.buffer[i] = if i % 2 == 0 {
-                ((c & 0xff00) >> 8) as u8
-            } else {
-                (c & 0xff) as u8
-            };
+        let c = c.to_be_bytes();
+        for pixel in self.buffer.chunks_exact_mut(2) {
+            pixel.copy_from_slice(c.as_slice())
         }
         Ok(())
     }
