@@ -10,6 +10,16 @@ use embedded_hal_async::spi::SpiDevice;
 /// 128px x 160px screen with 16 bits (2 bytes) per pixel
 const BUF_SIZE: usize = 128 * 160 * 2;
 
+/// Display Pixel Color Mode
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum PixelColor {
+    /// Red, Green, Blue,
+    RGB = 0x00,
+    /// Blue, Green, Red,
+    BGR = 0x08,
+}
+
 /// Async ST7735 LCD display driver.
 pub struct ST7735IF<SPI, DC, RST>
 where
@@ -23,8 +33,8 @@ where
     dc: DC,
     /// Reset pin.
     rst: RST,
-    /// Whether the display is RGB (true) or BGR (false)
-    rgb: bool,
+    /// Whether the display is RGB or BGR
+    rgb: PixelColor,
     /// Whether the colours are inverted (true) or not (false)
     inverted: bool,
     /// Global image offset
@@ -46,6 +56,7 @@ where
 
 /// Display orientation.
 #[derive(Clone, Copy)]
+#[repr(u8)]
 pub enum Orientation {
     Portrait = 0x00,
     Landscape = 0x60,
@@ -53,16 +64,20 @@ pub enum Orientation {
     LandscapeSwapped = 0xA0,
 }
 
+/// Display Settings
 pub struct Config {
-    rgb: bool,
-    inverted: bool,
-    orientation: Orientation,
+    /// `PixelColor`
+    pub rgb: PixelColor,
+    /// Colors inverted.
+    pub inverted: bool,
+    /// Display orientation
+    pub orientation: Orientation,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            rgb: true,
+            rgb: PixelColor::RGB,
             inverted: false,
             orientation: Orientation::Landscape,
         }
@@ -97,7 +112,7 @@ where
         self.hard_reset(delay).await?;
         let dc = &mut self.dc;
         let inverted = self.inverted;
-        let rgb = self.rgb;
+        let rgb = &[self.rgb as u8];
 
         struct Command<'a> {
             instruction: Instruction,
@@ -141,7 +156,7 @@ where
                 &[],
                 0,
             ),
-            Command::new(Instruction::MADCTL, if rgb { &[0x00] } else { &[0x08] }, 0),
+            Command::new(Instruction::MADCTL, rgb, 0),
             Command::new(Instruction::COLMOD, &[0x05], 0),
             Command::new(Instruction::DISPON, &[], 200),
         ];
@@ -186,13 +201,9 @@ where
     }
 
     pub async fn set_orientation(&mut self, orientation: Orientation) -> Result<(), Error<E>> {
-        if self.rgb {
-            self.write_command(Instruction::MADCTL, &[orientation as u8])
-                .await?;
-        } else {
-            self.write_command(Instruction::MADCTL, &[orientation as u8 | 0x08])
-                .await?;
-        }
+        self.write_command(Instruction::MADCTL, &[orientation as u8 | self.rgb as u8])
+            .await?;
+
         self.orientation = orientation;
         Ok(())
     }
