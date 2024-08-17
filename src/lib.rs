@@ -352,6 +352,11 @@ where
         self.buffer[idx] = high;
         self.buffer[idx + 1] = low;
     }
+
+    /// Sets the global offset of the displayed image
+    pub fn set_offset(&mut self, dx: u16, dy: u16) {
+        self.iface.set_offset(dx, dy);
+    }
 }
 
 extern crate embedded_graphics_core;
