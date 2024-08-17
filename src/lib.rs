@@ -1,5 +1,4 @@
 #![no_std]
-
 pub mod instruction;
 use crate::instruction::Instruction;
 use core::convert::Infallible;
@@ -7,8 +6,13 @@ use embedded_hal::digital::OutputPin;
 use embedded_hal_async::delay::DelayNs;
 use embedded_hal_async::spi::SpiDevice;
 
-/// 128px x 160px screen with 16 bits (2 bytes) per pixel
-const BUF_SIZE: usize = 128 * 160 * 2;
+/// Calculates the required buffer size.
+/// Inspired by `embedded-graphics`-`FrameBuffer` <https://docs.rs/embedded-graphics/latest/embedded_graphics/framebuffer/struct.Framebuffer.html>
+/// Once `feature(generic_const_exprs)` <https://github.com/rust-lang/rust/issues/76560> this is not needed anymore.
+#[must_use]
+pub const fn buffer_size(width: u16, height: u16) -> usize {
+    width as usize * height as usize * 2
+}
 
 /// Display Pixel Color Mode
 #[derive(Clone, Copy)]
@@ -42,16 +46,14 @@ where
     dy: u16,
     orientation: Orientation,
 }
-pub struct ST7735<SPI, DC, RST>
+pub struct ST7735<SPI, DC, RST, const WIDTH: u16, const HEIGHT: u16, const N: usize>
 where
     SPI: SpiDevice,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
     iface: ST7735IF<SPI, DC, RST>,
-    width: u32,
-    height: u32,
-    buffer: [u8; BUF_SIZE],
+    buffer: [u8; N],
 }
 
 /// Display orientation.
@@ -80,6 +82,22 @@ impl Default for Config {
             rgb: PixelColor::RGB,
             inverted: false,
             orientation: Orientation::Landscape,
+        }
+    }
+}
+
+struct Command<'a> {
+    instruction: Instruction,
+    params: &'a [u8],
+    delay_time: u32,
+}
+
+impl<'a> Command<'a> {
+    fn new(instruction: Instruction, params: &'a [u8], delay_time: u32) -> Self {
+        Self {
+            instruction,
+            params,
+            delay_time,
         }
     }
 }
@@ -113,22 +131,6 @@ where
         let dc = &mut self.dc;
         let inverted = self.inverted;
         let rgb = &[self.rgb as u8];
-
-        struct Command<'a> {
-            instruction: Instruction,
-            params: &'a [u8],
-            delay_time: u32,
-        }
-
-        impl<'a> Command<'a> {
-            fn new(instruction: Instruction, params: &'a [u8], delay_time: u32) -> Self {
-                Self {
-                    instruction,
-                    params,
-                    delay_time,
-                }
-            }
-        }
 
         let commands = [
             Command::new(Instruction::SWRESET, &[], 200),
@@ -280,19 +282,30 @@ where
     }
 }
 
-impl<SPI, DC, RST, E> ST7735<SPI, DC, RST>
+impl<SPI, DC, RST, E, const WIDTH: u16, const HEIGHT: u16, const N: usize>
+    ST7735<SPI, DC, RST, WIDTH, HEIGHT, N>
 where
     SPI: SpiDevice<Error = E>,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
+    #[allow(dead_code)]
+    const BUFFER_SIZE: usize = buffer_size(WIDTH, HEIGHT);
+
+    #[allow(dead_code)]
+    /// Static assertion that N is correct.
+    // MSRV: remove N when constant generic expressions are stabilized
+    // See <https://github.com/rust-lang/rust/issues/76560>
+    const CHECK_N: () = assert!(
+        N == Self::BUFFER_SIZE,
+        "Invalid N: see N must be equal to WIDTH x HEIGHT x 2!"
+    );
+
     /// Creates a new driver instance that uses hardware SPI.
-    pub fn new(spi: SPI, dc: DC, rst: RST, config: Config, width: u32, height: u32) -> Self {
+    pub fn new(spi: SPI, dc: DC, rst: RST, config: Config) -> Self {
         Self {
             iface: ST7735IF::new(spi, dc, rst, config),
-            width,
-            height,
-            buffer: [0; BUF_SIZE],
+            buffer: [0; N],
         }
     }
 
@@ -306,9 +319,10 @@ where
         Ok(())
     }
 
+    /// Transfer the internal buffer to the LCD display.
     pub async fn flush(&mut self) -> Result<(), Error<E>> {
         self.iface
-            .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
+            .set_address_window(0, 0, WIDTH - 1, HEIGHT - 1)
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
@@ -316,9 +330,10 @@ where
         self.iface.spi.write(buf).await.map_err(Error::Comm)
     }
 
+    /// Transfer the external buffer to the LCD display.
     pub async fn flush_buffer(&mut self, buf: &[u8]) -> Result<(), Error<E>> {
         self.iface
-            .set_address_window(0, 0, self.width as u16 - 1, self.height as u16 - 1)
+            .set_address_window(0, 0, WIDTH - 1, HEIGHT - 1)
             .await?;
         self.iface.write_command(Instruction::RAMWR, &[]).await?;
         self.iface.start_data()?;
@@ -329,17 +344,17 @@ where
     pub fn set_pixel(&mut self, x: u16, y: u16, color: u16) {
         let idx = match self.iface.orientation {
             Orientation::Landscape | Orientation::LandscapeSwapped => {
-                if x as u32 >= self.width {
+                if x >= WIDTH {
                     return;
                 }
-                ((y as usize) * self.width as usize) + (x as usize)
+                (usize::from(y) * usize::from(WIDTH)) + usize::from(x)
             }
 
             Orientation::Portrait | Orientation::PortraitSwapped => {
-                if y as u32 >= self.width {
+                if y >= WIDTH {
                     return;
                 }
-                ((y as usize) * self.height as usize) + (x as usize)
+                (usize::from(y) * usize::from(HEIGHT)) + usize::from(x)
             }
         } * 2;
 
@@ -369,7 +384,8 @@ use self::embedded_graphics_core::{
     prelude::*,
 };
 
-impl<SPI, DC, RST, E> DrawTarget for ST7735<SPI, DC, RST>
+impl<SPI, DC, RST, E, const WIDTH: u16, const HEIGHT: u16, const N: usize> DrawTarget
+    for ST7735<SPI, DC, RST, WIDTH, HEIGHT, N>
 where
     SPI: SpiDevice<Error = E>,
     DC: OutputPin<Error = Infallible>,
@@ -388,7 +404,7 @@ where
             .into_iter()
             .filter(|Pixel(pos, _color)| bb.contains(*pos))
             .for_each(|Pixel(pos, color)| {
-                self.set_pixel(pos.x as u16, pos.y as u16, RawU16::from(color).into_inner())
+                self.set_pixel(pos.x as u16, pos.y as u16, RawU16::from(color).into_inner());
             });
 
         Ok(())
@@ -396,8 +412,7 @@ where
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
         let c = RawU16::from(color).into_inner();
-        for i in 0..BUF_SIZE {
-            assert!(i < self.buffer.len());
+        for i in 0..N {
             self.buffer[i] = if i % 2 == 0 {
                 ((c & 0xff00) >> 8) as u8
             } else {
@@ -408,14 +423,15 @@ where
     }
 }
 
-impl<SPI, DC, RST, E> OriginDimensions for ST7735<SPI, DC, RST>
+impl<SPI, DC, RST, E, const WIDTH: u16, const HEIGHT: u16, const N: usize> OriginDimensions
+    for ST7735<SPI, DC, RST, WIDTH, HEIGHT, N>
 where
     SPI: SpiDevice<Error = E>,
     DC: OutputPin<Error = Infallible>,
     RST: OutputPin<Error = Infallible>,
 {
     fn size(&self) -> Size {
-        Size::new(self.width, self.height)
+        Size::new(u32::from(WIDTH), u32::from(HEIGHT))
     }
 }
 
@@ -435,6 +451,7 @@ pub struct Frame<const N: usize> {
 }
 
 impl<const N: usize> Frame<N> {
+    #[must_use]
     pub fn new(width: u32, height: u32, orientation: Orientation, buffer: [u8; N]) -> Self {
         Self {
             width,
@@ -447,14 +464,14 @@ impl<const N: usize> Frame<N> {
         let color = RawU16::from(color).into_inner();
         let idx = match self.orientation {
             Orientation::Landscape | Orientation::LandscapeSwapped => {
-                if x as u32 >= self.width {
+                if u32::from(x) >= self.width {
                     return;
                 }
-                ((y as usize) * self.width as usize) + (x as usize)
+                (usize::from(y) * (self.width as usize)) + usize::from(x)
             }
 
             Orientation::Portrait | Orientation::PortraitSwapped => {
-                if y as u32 >= self.width {
+                if u32::from(y) >= self.height {
                     return;
                 }
                 ((y as usize) * self.height as usize) + (x as usize)
@@ -500,8 +517,7 @@ impl<const N: usize> DrawTarget for Frame<N> {
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
         let c = RawU16::from(color).into_inner();
-        for i in 0..BUF_SIZE {
-            assert!(i < self.buffer.len());
+        for i in 0..N {
             self.buffer[i] = if i % 2 == 0 {
                 ((c & 0xff00) >> 8) as u8
             } else {
