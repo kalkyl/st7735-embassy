@@ -1,36 +1,37 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
 use defmt::*;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_executor::_export::StaticCell;
 use embassy_executor::Spawner;
+use embassy_nrf::spim::Frequency;
 use embassy_nrf::{
     bind_interrupts,
-    gpio::{AnyPin, Level, Output, OutputDrive, Pin},
+    gpio::{Level, Output, OutputDrive, Pin},
     peripherals::{self, SPI3},
     spim::{self, Config, Spim},
 };
-use embassy_nrf::spim::Frequency;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
+use static_cell::StaticCell;
 use tinybmp::Bmp;
 
-use st7735_embassy::{self, ST7735};
+use st7735_embassy::{self, buffer_size, ST7735};
 
-type SpiDev = SpiDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static, AnyPin>>;
+type SpiDev = SpiDevice<'static, ThreadModeRawMutex, Spim<'static, SPI3>, Output<'static>>;
+// Creatr a `Display` type, so we don´t need to specify the generic multipule times.
+type Display =
+    ST7735<SpiDev, Output<'static>, Output<'static>, 160, 128, { buffer_size(160, 128) }>;
 
 bind_interrupts!(struct Irqs {
     SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
 });
 
 #[embassy_executor::task]
-async fn display_task(mut display: ST7735<SpiDev, Output<'static, AnyPin>, Output<'static, AnyPin>>) {
+async fn display_task(mut display: Display) {
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
     let raw_image: Bmp<Rgb565> =
@@ -54,7 +55,7 @@ async fn main(spawner: Spawner) {
     let spi_dev = SpiDevice::new(spi_bus, cs_pin);
     let dc = Output::new(p.P1_02.degrade(), Level::High, OutputDrive::Standard);
     let rst = Output::new(p.P1_01.degrade(), Level::High, OutputDrive::Standard);
-    let display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
+    let display = Display::new(spi_dev, dc, rst, Default::default());
     unwrap!(spawner.spawn(display_task(display)));
 
     let mut backlight = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
