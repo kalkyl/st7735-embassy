@@ -1,25 +1,22 @@
 // $ cargo rb ferris
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-
 
 use nrf_embassy as _; // global logger + panicking-behavior + memory layout
 
 use embassy_executor::Spawner;
+use embassy_nrf::gpio::Pin;
 use embassy_nrf::{
     bind_interrupts,
     gpio::{Level, Output, OutputDrive},
-    peripherals,
-    spim};
-use embassy_nrf::gpio::Pin;
+    peripherals, spim,
+};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::{image::Image, pixelcolor::Rgb565, prelude::*};
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_hal_bus::spi::NoDelay;
 use tinybmp::Bmp;
 
-use st7735_embassy::{self, ST7735};
+use st7735_embassy::{self, buffer_size, ST7735};
 
 bind_interrupts!(struct Irqs {
     SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
@@ -34,7 +31,7 @@ async fn main(_spawner: Spawner) {
     let spim = spim::Spim::new_txonly(p.SPI3, Irqs, p.P1_05, p.P1_04, config);
     // cs_pin: chip select pin
     let cs_pin = Output::new(p.P1_03.degrade(), Level::Low, OutputDrive::Standard);
-    let spi_dev = ExclusiveDevice::new(spim, cs_pin, NoDelay);
+    let spi_dev = ExclusiveDevice::new(spim, cs_pin, Delay).unwrap();
 
     // rst:  display reset pin, managed at driver level
     let rst = Output::new(p.P1_01.degrade(), Level::High, OutputDrive::Standard);
@@ -42,7 +39,12 @@ async fn main(_spawner: Spawner) {
 
     let dc = Output::new(p.P1_02.degrade(), Level::High, OutputDrive::Standard);
 
-    let mut display = ST7735::new(spi_dev, dc, rst, Default::default(), 160, 128);
+    let mut display = ST7735::<_, _, _, 160, 128, { buffer_size(160, 128) }>::new(
+        spi_dev,
+        dc,
+        rst,
+        Default::default(),
+    );
     display.init(&mut Delay).await.unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 

@@ -1,6 +1,4 @@
 #![no_std]
-#![feature(type_alias_impl_trait)]
-use core::sync::atomic::{AtomicUsize, Ordering};
 pub use defmt::*;
 use defmt_rtt as _; // global logger
 use panic_probe as _;
@@ -11,14 +9,6 @@ use panic_probe as _;
 fn panic() -> ! {
     cortex_m::asm::udf()
 }
-
-static COUNT: AtomicUsize = AtomicUsize::new(0);
-defmt::timestamp!("{=usize}", {
-    // NOTE(no-CAS) `timestamps` runs with interrupts disabled
-    let n = COUNT.load(Ordering::Relaxed);
-    COUNT.store(n + 1, Ordering::Relaxed);
-    n
-});
 
 /// Terminates the application and makes `probe-run` exit with exit-code = 0
 pub fn exit() -> ! {
